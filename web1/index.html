@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kedai Hawa — Owner</title><link rel="stylesheet" href="../shared/styles.css"></head>
+<body>
+<header class="top"><div class="top-inner"><div><div class="brand">🌿 KEDAI HAWA — OWNER</div><div class="sub">Dashboard pengelolaan kedai</div></div><div style="display:flex;gap:8px;align-items:center"><button id="notifyBtn" class="btn secondary hidden">🔔 Aktifkan Notifikasi</button><button id="logoutBtn" class="btn secondary hidden">Keluar</button></div></div></header>
+<main class="wrap">
+<section id="loginBox" class="card" style="max-width:430px;margin:40px auto"><h2>🔐 Login Owner</h2><div class="muted">Gunakan akun Firebase Authentication.</div><label>Email</label><input id="email" type="email" placeholder="owner@email.com"><label>Password</label><input id="password" type="password" placeholder="Password"><button id="loginBtn" class="btn primary" style="width:100%;margin-top:12px">Masuk</button><div id="loginMsg" class="notice error hidden" style="margin-top:10px"></div></section>
+
+<section id="dashboard" class="hidden">
+  <div class="grid">
+    <div class="card"><div class="muted">Pesanan baru</div><div id="newCount" style="font-size:30px;font-weight:950">0</div></div>
+    <div class="card"><div class="muted">Pesanan hari ini</div><div id="todayCount" style="font-size:30px;font-weight:950">0</div></div>
+    <div class="card"><div class="muted">Omzet selesai</div><div id="todaySales" style="font-size:30px;font-weight:950">Rp0</div></div>
+  </div>
+  <div class="admin-nav"><button class="active" data-page="orders">📋 Pesanan</button><button data-page="history">📜 History</button><button data-page="menu">🍔 Menu</button></div>
+  <div id="ordersPage" class="card"><div class="row"><h2>Pesanan</h2><span id="liveBadge" class="order-status status-ok">● REALTIME</span></div><div class="notice success" style="margin:10px 0">🖨️ <b>Auto Print aktif:</b> setiap pesanan baru akan otomatis mencetak <b>lampiran order</b> ke RPP02N melalui Cleanter. Struk dicetak terpisah.</div><div id="ordersList"></div></div>
+  <div id="historyPage" class="card hidden"><div class="row"><h2>📜 History Pesanan</h2><div class="row gap"><button id="printHistoryBtn" class="btn secondary">🖨️ Print</button><button id="downloadHistoryBtn" class="btn primary">⬇️ Excel</button></div></div><div class="grid" style="margin:12px 0"><div><label>Dari tanggal</label><input id="historyFrom" type="date"></div><div><label>Sampai tanggal</label><input id="historyTo" type="date"></div><div><label>Status</label><select id="historyStatus"><option value="">Semua</option><option value="pending">Menunggu Konfirmasi</option><option value="confirmed">Dikonfirmasi</option><option value="processing">Diproses</option><option value="ready">Siap / Diantar</option><option value="delivered">Diserahkan ke Pelanggan</option><option value="received">Diterima Pelanggan</option><option value="cancelled">Dibatalkan</option></select></div></div><div id="historySummary" class="notice success"></div><div class="card" style="margin-top:12px;background:#fafcf9"><div class="row"><b>💰 Omzet sesuai filter</b><b id="historyOmzet">Rp0</b></div></div><div class="table-wrap" style="margin-top:12px"><table class="table"><thead><tr><th>Order</th><th>Tanggal & Jam</th><th>Pelanggan</th><th>Pengiriman</th><th>Total</th><th>Status</th></tr></thead><tbody id="historyRows"></tbody></table></div></div><div id="menuPage" class="card hidden"><div class="row"><h2>🍔 Kelola Menu</h2><div class="row gap"><button id="newMenuBtn" class="btn primary">＋ Tambah Menu</button><button id="seedBtn" class="btn secondary">Masukkan Data Menu Awal</button></div></div><div class="muted" style="margin:6px 0 12px">Edit untuk mengubah nama, harga, varian, stok, status, dan deskripsi. Hapus untuk mengurangi menu. Tambah Menu untuk menambah menu baru.</div><div class="table-wrap"><table class="table"><thead><tr><th>Menu</th><th>Kategori</th><th>Harga/Varian</th><th>Stok</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="menuRows"></tbody></table></div></div>
+</section>
+</main>
+
+<div id="printerStatus" class="notice">🟡 Menunggu order baru — Cleanter/RPP02N</div>
+<div id="orderAlert" class="card hidden" style="
+position:fixed;left:14px;right:14px;top:14px;z-index:9999;
+background:#ffffff;border:2px solid #17663b;box-shadow:0 10px 30px rgba(0,0,0,.20);
+padding:14px;">
+  <div class="row">
+    <div>
+      <div style="font-weight:900;font-size:18px">🔔 Pesanan Baru Masuk!</div>
+      <div id="orderAlertText" class="muted" style="margin-top:4px"></div>
+    </div>
+    <button id="closeOrderAlert" class="btn ghost">✕</button>
+  </div>
+  <button id="goToOrdersBtn" class="btn primary" style="width:100%;margin-top:10px">📋 Lihat Pesanan</button>
+</div>
+<div id="editModal" class="modal"><div class="sheet"><div class="row"><h2 id="editTitle">Edit Menu</h2><button class="btn ghost" data-close>✕</button></div><input type="hidden" id="editId"><input type="hidden" id="editMode" value="edit"><label>Nama Menu</label><input id="editName" placeholder="Contoh: Mie Tul"><label>Kategori</label><input id="editCategory" placeholder="Makanan / Minuman / Frozen"><label>Harga</label><input id="editPrice" type="number" inputmode="numeric" min="0" placeholder="12000"><label>Varian (opsional)</label><textarea id="editVariants" rows="3" placeholder="Varian 1|6000&#10;Varian 2|10000"></textarea><div class="muted" style="font-size:12px;margin-top:4px">Satu varian per baris dengan format: Nama Varian|Harga</div><label>Stok (kosong = belum diatur)</label><input id="editStock" type="number" min="0"><label>Urutan Tampil</label><input id="editSort" type="number" min="1"><label>Status</label><select id="editActive"><option value="true">Tersedia</option><option value="false">Nonaktif</option></select><label>Deskripsi</label><textarea id="editDesc" rows="2" placeholder="Deskripsi singkat menu"></textarea><button id="saveMenuBtn" class="btn primary" style="width:100%;margin-top:12px">Simpan Perubahan</button><div id="editMsg" class="notice hidden" style="margin-top:10px"></div></div></div>
+<script type="module">window.addEventListener("error",e=>console.error("Kedai Hawa error:",e.error||e.message));</script><script type="module" src="./app.js"></script>
+</body></html>

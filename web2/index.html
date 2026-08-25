@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kedai Hawa — Menu</title><link rel="stylesheet" href="../shared/styles.css"></head>
+<body>
+<header class="top"><div class="top-inner"><div><div class="brand">🌿 KEDAI HAWA</div><div class="sub">Menu & pemesanan online</div></div><button id="openCart" class="btn secondary">🛒 Keranjang</button></div></header>
+<main class="wrap">
+  <div class="card"><input id="search" placeholder="🔎 Cari makanan atau minuman..."><div id="tabs" class="tabs"></div></div>
+  <div id="notice" class="notice hidden" style="margin-top:14px"></div>
+  <section class="card" style="margin-top:14px">
+    <div class="row"><h2 style="margin:0">📦 Status Pesanan</h2><span class="order-status status-ok">● REALTIME</span></div>
+    <div class="muted" style="margin-top:4px">Status akan berubah otomatis saat Owner memperbarui pesanan.</div>
+    <div id="ordersBox" style="margin-top:10px"><div class="muted">Memuat pesanan...</div></div>
+  </section>
+  <section id="menuGrid" class="grid" style="margin-top:14px"></section>
+</main>
+<div id="activeOrderBar" class="cartbar hidden" style="bottom:82px"><div class="row"><div><b>📦 Pesanan Aktif</b><div id="activeOrderStatus" class="muted" style="color:#fff"></div></div><button id="activeOrderBtn" class="btn secondary">Lihat</button></div></div>
+<div id="cartBar" class="cartbar hidden"><div class="row"><div><b id="cartCount">0 item</b><div id="cartTotal">Rp0</div></div><button id="cartBarBtn" class="btn secondary">Lihat Keranjang</button></div></div>
+
+<div id="cartModal" class="modal"><div class="sheet">
+  <div class="row"><h2>🛒 Keranjang</h2><button class="btn ghost" data-close>✕</button></div>
+  <div id="cartList"></div><div class="card" style="margin-top:12px;background:#fafcf9"><div class="row"><b>Subtotal</b><b id="cartSubtotal">Rp0</b></div></div>
+  <button id="checkoutBtn" class="btn primary" style="width:100%;margin-top:12px">Lanjut Checkout</button>
+</div></div>
+
+<div id="checkoutModal" class="modal"><div class="sheet">
+  <div class="row"><h2>📝 Checkout</h2><button class="btn ghost" data-close>✕</button></div>
+  <div class="card" style="background:#fafcf9"><div id="checkoutSummary"></div><div class="row" style="margin-top:10px"><b>Total</b><b id="checkoutTotal">Rp0</b></div></div>
+  <label>Nama pelanggan</label><input id="customerName" placeholder="Nama Anda">
+  <label>Nomor HP</label><input id="customerPhone" placeholder="08xxxxxxxxxx" inputmode="tel">
+  <label>Metode pengiriman</label><select id="deliveryMethod"><option value="pickup">COD / Ambil Sendiri</option><option value="direct">Antar Langsung</option><option value="courier">Ojek Online / Kurir</option></select>
+  <div id="addressBox" class="hidden"><label>Alamat pengiriman</label><textarea id="address" rows="3" placeholder="Alamat lengkap"></textarea><label>Catatan untuk kurir</label><textarea id="deliveryNote" rows="2" placeholder="Patokan / catatan (opsional)"></textarea></div>
+  <label>Metode pembayaran</label><select id="paymentMethod"><option value="cash">COD / Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option></select>
+  <label>Catatan pesanan</label><textarea id="orderNote" rows="2" placeholder="Contoh: tidak pedas"></textarea>
+  <button id="placeOrderBtn" class="btn primary" style="width:100%;margin-top:12px">Pesan Sekarang</button>
+  <div id="checkoutMsg" class="notice hidden" style="margin-top:10px"></div>
+</div></div>
+
+<div id="successModal" class="modal"><div class="sheet">
+  <div style="text-align:center"><div style="font-size:52px">✅</div><h2>Pesanan Diterima</h2><div class="muted">Nomor order Anda</div><div id="successOrderNo" style="font-size:40px;font-weight:950;color:var(--green);margin:6px 0">#001</div><div id="successStatus" class="order-status">Menunggu Konfirmasi</div></div>
+  <div id="successDetail" class="card" style="margin-top:16px"></div>
+  <button id="receivedBtn" class="btn primary hidden" style="width:100%;margin-top:12px">🟢 Orderan Diterima</button>
+  <button id="closeSuccessBtn" class="btn secondary" style="width:100%;margin-top:8px">Kembali ke Menu</button>
+</div></div>
+
+<script type="module" src="./app.js"></script>
+</body></html>

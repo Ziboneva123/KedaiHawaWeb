@@ -1,0 +1,39 @@
+*{box-sizing:border-box}
+:root{--green:#185c37;--green2:#237a4a;--cream:#fff8e8;--gold:#e5b84b;--red:#c83d32;--muted:#667085;--line:#e5e7eb}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f6f7f5;color:#17251d}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer;border:0}
+.top{background:linear-gradient(135deg,var(--green),#0f3e25);color:#fff;padding:18px 16px;position:sticky;top:0;z-index:10}
+.top-inner{max-width:1100px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{font-weight:900;font-size:22px;letter-spacing:.5px}.sub{font-size:12px;opacity:.8}
+.wrap{max-width:1100px;margin:auto;padding:18px 14px 90px}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 4px 16px rgba(0,0,0,.04)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.menu-card{overflow:hidden;padding:0}.menu-photo{height:150px;background:#eef1ed;display:flex;align-items:center;justify-content:center;color:#8a948e;font-size:44px}
+.menu-body{padding:14px}.price{font-weight:900;color:var(--green);font-size:18px}.muted{color:var(--muted);font-size:13px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.gap{gap:8px}
+.btn{padding:10px 14px;border-radius:10px;font-weight:800}.primary{background:var(--green);color:#fff}.secondary{background:#edf5ef;color:var(--green)}.danger{background:#fdecec;color:#a12d25}.ghost{background:transparent;color:inherit}
+input,select,textarea{width:100%;padding:11px 12px;border:1px solid #d6d9d7;border-radius:10px;background:#fff}
+label{display:block;font-weight:700;font-size:13px;margin:10px 0 6px}
+.tabs{display:flex;gap:8px;overflow:auto;margin:12px 0}.tab{white-space:nowrap;padding:9px 13px;border-radius:999px;background:#fff;border:1px solid var(--line)}.tab.active{background:var(--green);color:#fff}
+.cartbar{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);width:min(94%,520px);background:var(--green);color:#fff;border-radius:16px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.2);z-index:20}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.48);display:none;align-items:flex-end;justify-content:center;z-index:30}.modal.show{display:flex}
+.sheet{width:min(720px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:20px 20px 0 0;padding:18px}
+.qty{display:flex;align-items:center;gap:7px}.qty button{width:34px;height:34px;border-radius:9px;background:#edf1ed;font-weight:900}
+.order-status{padding:9px 11px;border-radius:999px;background:#fff3cd;display:inline-block;font-weight:800;font-size:12px}
+.status-ok{background:#e7f6ec;color:#17653a}.status-blue{background:#e8f1ff;color:#1d4f91}
+.admin-nav{display:flex;gap:8px;overflow:auto;margin:14px 0}.admin-nav button{background:#fff;border:1px solid var(--line);padding:10px 13px;border-radius:10px}.admin-nav button.active{background:var(--green);color:#fff}
+.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;min-width:700px}.table th,.table td{padding:11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.table th{background:#fafafa}
+.notice{padding:12px;border-radius:12px;background:#fff8e8;border:1px solid #f1d991}.success{background:#e9f7ed;border-color:#b8e1c4}.error{background:#fff0ef;border-color:#f2b7b2}
+.hidden{display:none!important}
+@media(min-width:760px){.modal{align-items:center}.sheet{border-radius:20px}.top{position:static}}
+
+/* Status pesanan pelanggan */
+.order-progress{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;position:relative}
+.order-step{font-size:11px;text-align:center;color:#9aa39e;display:flex;flex-direction:column;align-items:center;gap:5px}
+.order-step .step-dot{width:28px;height:28px;border-radius:50%;border:2px solid #d7ddd9;display:flex;align-items:center;justify-content:center;background:#fff;font-weight:800}
+.order-step.done,.order-step.current{color:var(--green);font-weight:700}
+.order-step.done .step-dot,.order-step.current .step-dot{border-color:var(--green);color:var(--green)}
+.order-step.current .step-dot{background:#eaf6ee}
+.customer-order-card{overflow:hidden}
+@media(max-width:520px){.order-progress{grid-template-columns:repeat(5,minmax(55px,1fr));overflow-x:auto;padding-bottom:4px}.order-step{min-width:55px}}
