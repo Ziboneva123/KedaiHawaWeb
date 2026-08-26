@@ -8,3 +8,11 @@ Fitur:
 - Lampiran order mencetak harga satuan, subtotal item, subtotal, ongkir, dan total.
 - Struk pembayaran terpisah.
 - Kelola Menu: tambah, edit, hapus, harga, varian, stok, status, deskripsi, urutan.
+
+
+## Update checkout v17
+- QRIS Kedai Hawa tampil saat pelanggan memilih QRIS.
+- Transfer BRI: 090801035174531 a/n Eva Nurafiani.
+- Antar Langsung: qty < 5 dikenakan Rp5.000; qty >= 5 Rp0.
+- Ojek Online/Kurir: tombol ke web Lalamove dan titik pickup Kedai Hawa.
+- QRIS asset: web2/assets/qris-kedai-hawa.png.

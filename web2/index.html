@@ -29,8 +29,21 @@
   <label>Nama pelanggan</label><input id="customerName" placeholder="Nama Anda">
   <label>Nomor HP</label><input id="customerPhone" placeholder="08xxxxxxxxxx" inputmode="tel">
   <label>Metode pengiriman</label><select id="deliveryMethod"><option value="pickup">COD / Ambil Sendiri</option><option value="direct">Antar Langsung</option><option value="courier">Ojek Online / Kurir</option></select>
+  <div id="deliveryInfo" class="notice" style="margin-top:10px"></div>
   <div id="addressBox" class="hidden"><label>Alamat pengiriman</label><textarea id="address" rows="3" placeholder="Alamat lengkap"></textarea><label>Catatan untuk kurir</label><textarea id="deliveryNote" rows="2" placeholder="Patokan / catatan (opsional)"></textarea></div>
-  <label>Metode pembayaran</label><select id="paymentMethod"><option value="cash">COD / Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option></select>
+  <div id="lalamoveBox" class="card hidden" style="margin-top:10px;background:#f7fbf8">
+    <b>🛵 Ojek Online / Lalamove</b>
+    <div class="muted" style="margin-top:6px">Titik pickup Kedai Hawa:</div>
+    <div style="margin-top:4px">Jl. Adipati Karna / Jl. Kp. Pasir Limus, Wangunharja, Cikarang Utara, Kabupaten Bekasi, Jawa Barat 17530</div>
+    <div class="gap" style="display:flex;flex-wrap:wrap;margin-top:10px">
+      <button id="openLalamoveBtn" type="button" class="btn primary">🚚 Buka Lalamove</button>
+      <button id="copyPickupBtn" type="button" class="btn secondary">📋 Salin Titik Pickup</button>
+      <a class="btn secondary" href="https://maps.app.goo.gl/z2CWgq9P42W7hzZa9" target="_blank" rel="noopener">📍 Lihat Peta</a>
+    </div>
+    <div class="muted" style="margin-top:8px">Di Lalamove, masukkan titik pickup Kedai Hawa lalu alamat pelanggan sebagai tujuan.</div>
+  </div>
+  <label>Metode pembayaran</label><select id="paymentMethod"><option value="cash">COD / Tunai</option><option value="transfer">Transfer Bank (TF)</option><option value="qris">QRIS</option></select>
+  <div id="paymentInfo" class="card hidden" style="margin-top:10px;background:#fafcf9"></div>
   <label>Catatan pesanan</label><textarea id="orderNote" rows="2" placeholder="Contoh: tidak pedas"></textarea>
   <button id="placeOrderBtn" class="btn primary" style="width:100%;margin-top:12px">Pesan Sekarang</button>
   <div id="checkoutMsg" class="notice hidden" style="margin-top:10px"></div>

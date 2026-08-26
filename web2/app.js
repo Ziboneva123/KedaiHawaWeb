@@ -6,6 +6,41 @@ import {
 const $ = id => document.getElementById(id);
 const rupiah = n => new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(n||0);
 
+const KEDAI_HAWA_PICKUP_ADDRESS = "Jl. Adipati Karna / Jl. Kp. Pasir Limus, Wangunharja, Cikarang Utara, Kabupaten Bekasi, Jawa Barat 17530";
+const KEDAI_HAWA_MAP_URL = "https://maps.app.goo.gl/z2CWgq9P42W7hzZa9";
+const LALAMOVE_WEB_URL = "https://web.lalamove.com/";
+
+function totalQty(){ return cart.reduce((s,x)=>s+(Number(x.qty)||0),0); }
+function calcShippingFee(method){
+  if(method === "direct") return totalQty() < 5 ? 5000 : 0;
+  return 0;
+}
+function updateDeliveryInfo(){
+  const method=$("deliveryMethod").value, qty=totalQty();
+  $("addressBox").classList.toggle("hidden",method==="pickup");
+  $("lalamoveBox").classList.toggle("hidden",method!=="courier");
+  if(method==="pickup") $("deliveryInfo").innerHTML="🏪 <b>Ambil Sendiri</b> — tidak ada ongkir.";
+  else if(method==="direct"){
+    const fee=qty<5?5000:0;
+    $("deliveryInfo").innerHTML=fee
+      ? `🚚 <b>Antar Langsung:</b> total qty ${qty}. Karena kurang dari 5, ongkir <b>${rupiah(fee)}</b> ditambahkan.`
+      : `🚚 <b>Antar Langsung:</b> total qty ${qty}. Minimal 5 tercapai, ongkir <b>Rp0</b>.`;
+  } else $("deliveryInfo").innerHTML="🛵 <b>Ojek Online / Lalamove:</b> ongkir mengikuti tarif Lalamove.";
+  renderCheckout();
+}
+function updatePaymentInfo(){
+  const method=$("paymentMethod").value, box=$("paymentInfo");
+  if(method==="transfer"){
+    box.className="card";
+    box.innerHTML=`<b>🏦 Pembayaran Transfer Bank</b><div style="margin-top:8px"><div>Bank: <b>BRI</b></div><div>No. Rekening: <b>090801035174531</b></div><div>A/N: <b>Eva Nurafiani</b></div></div>`;
+  } else if(method==="qris"){
+    box.className="card";
+    box.innerHTML=`<b>📱 Pembayaran QRIS</b><div class="muted" style="margin:6px 0 10px">Scan QRIS Kedai Hawa.</div><div style="text-align:center"><img src="./assets/qris-kedai-hawa.png" alt="QRIS Kedai Hawa" style="width:min(100%,360px);border:1px solid #e5e7eb;border-radius:12px;background:#fff;padding:8px"></div><div style="text-align:center;font-weight:800;margin-top:8px">KEDAI HAWA</div>`;
+  } else {
+    box.className="card hidden"; box.innerHTML="";
+  }
+}
+
 let menu = [], cart = [], activeCat = "Semua", currentUid = null, currentOrderId = null, customerOrders = [];
 
 async function initAuth(){
@@ -131,12 +166,24 @@ function open(id){$(id).classList.add("show")} function close(id){$(id).classLis
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest(".modal").classList.remove("show"));
 $("openCart").onclick=()=>{renderCart();open("cartModal")}; $("cartBarBtn").onclick=()=>{renderCart();open("cartModal")};
 $("checkoutBtn").onclick=()=>{if(!cart.length)return;renderCheckout();close("cartModal");open("checkoutModal")};
-$("deliveryMethod").onchange=()=> $("addressBox").classList.toggle("hidden",$("deliveryMethod").value==="pickup");
+$("deliveryMethod").onchange=updateDeliveryInfo;
+$("paymentMethod").onchange=updatePaymentInfo;
+$("openLalamoveBtn").onclick=()=>window.open(LALAMOVE_WEB_URL,"_blank");
+$("copyPickupBtn").onclick=async()=>{
+  try{await navigator.clipboard.writeText(KEDAI_HAWA_PICKUP_ADDRESS);$("copyPickupBtn").textContent="✅ Sudah Disalin";setTimeout(()=>$("copyPickupBtn").textContent="📋 Salin Titik Pickup",1800);}
+  catch(e){alert("Alamat pickup: "+KEDAI_HAWA_PICKUP_ADDRESS);}
+};
 $("search").oninput=renderMenu;
 
 function renderCheckout(){
-  $("checkoutSummary").innerHTML=cart.map(x=>`${x.name}${x.variant?` (${x.variant})`:""} × ${x.qty} = <b>${rupiah(x.qty*x.price)}</b>`).join("<br>");
-  $("checkoutTotal").textContent=rupiah(cart.reduce((s,x)=>s+x.qty*x.price,0));
+  const subtotal=cart.reduce((s,x)=>s+x.qty*x.price,0);
+  const shippingFee=calcShippingFee($("deliveryMethod").value);
+  const total=subtotal+shippingFee;
+  $("checkoutSummary").innerHTML=cart.map(x=>`${x.name}${x.variant?` (${x.variant})`:""} × ${x.qty} = <b>${rupiah(x.qty*x.price)}</b>`).join("<br>")
+    + `<hr><div class="row"><span>Subtotal</span><b>${rupiah(subtotal)}</b></div>`
+    + `<div class="row" style="margin-top:5px"><span>Ongkir</span><b>${rupiah(shippingFee)}</b></div>`
+    + `<div class="muted" style="margin-top:5px">Total qty: ${totalQty()}</div>`;
+  $("checkoutTotal").textContent=rupiah(total);
 }
 
 function nextOrderNo(){
@@ -149,8 +196,21 @@ $("placeOrderBtn").onclick=async()=>{
   if(!name||!phone){$("checkoutMsg").textContent="Nama dan nomor HP wajib diisi.";$("checkoutMsg").className="notice error";$("checkoutMsg").classList.remove("hidden");return;}
   if(method!=="pickup"&&!$("address").value.trim()){ $("checkoutMsg").textContent="Alamat wajib diisi untuk pengantaran."; $("checkoutMsg").className="notice error"; $("checkoutMsg").classList.remove("hidden");return; }
   const subtotal=cart.reduce((s,x)=>s+x.qty*x.price,0);
+  const shippingFee=calcShippingFee(method);
+  const total=subtotal+shippingFee;
+  const paymentMethod=$("paymentMethod").value;
   const orderNo=nextOrderNo();
-  const payload={orderNo,customerUid:currentUid,customerName:name,customerPhone:phone,deliveryMethod:method,address:method==="pickup"?"":$("address").value.trim(),deliveryNote:$("deliveryNote").value.trim(),paymentMethod:$("paymentMethod").value,orderNote:$("orderNote").value.trim(),items:cart.map(x=>({name:x.name,variant:x.variant,price:x.price,qty:x.qty})),subtotal,shippingFee:0,total:subtotal,status:"pending",createdAt:serverTimestamp(),customerReceived:false};
+  const payload={
+    orderNo,customerUid:currentUid,customerName:name,customerPhone:phone,deliveryMethod:method,
+    address:method==="pickup"?"":$("address").value.trim(),deliveryNote:$("deliveryNote").value.trim(),
+    paymentMethod,orderNote:$("orderNote").value.trim(),
+    items:cart.map(x=>({name:x.name,variant:x.variant,price:x.price,qty:x.qty})),
+    totalQty:totalQty(),subtotal,shippingFee,total,status:"pending",createdAt:serverTimestamp(),customerReceived:false,
+    ...(method==="direct"?{shippingRule:"Qty < 5 = Rp5.000; Qty >= 5 = Rp0"}:{}),
+    ...(method==="courier"?{lalamovePickupAddress:KEDAI_HAWA_PICKUP_ADDRESS,lalamovePickupMapUrl:KEDAI_HAWA_MAP_URL,lalamoveWebUrl:LALAMOVE_WEB_URL}:{}),
+    ...(paymentMethod==="transfer"?{bankName:"BRI",bankAccount:"090801035174531",bankAccountName:"Eva Nurafiani"}:{}),
+    ...(paymentMethod==="qris"?{qrisName:"KEDAI HAWA"}:{})
+  };
   $("placeOrderBtn").disabled=true;
   try{
     const ref=await addDoc(collection(db,"orders"),payload);
@@ -197,4 +257,6 @@ $("receivedBtn").onclick=async()=>{if(currentOrderId){await updateDoc(doc(db,"or
 $("activeOrderBtn").onclick=openCurrentOrder;
 $("closeSuccessBtn").onclick=()=>close("successModal");
 
+updateDeliveryInfo();
+updatePaymentInfo();
 listenMenu();
