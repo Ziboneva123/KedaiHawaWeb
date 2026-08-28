@@ -321,14 +321,25 @@ function downloadHistory(){const list=histList(),rows=[["Order","Tanggal & Jam",
 function printHistory(){const list=histList(),omzet=list.filter(o=>o.status!=="cancelled").reduce((a,o)=>a+(Number(o.total)||0),0),rows=list.map(o=>{const d=histDate(o);return `<tr><td>#${(o.orderNo||"").split("-").at(-1)||"?"}</td><td>${d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"-"}</td><td>${o.customerName||"-"}</td><td>${o.deliveryMethod||"-"}</td><td>${rupiah(o.total)}</td><td>${label(o.status)}</td></tr>`}).join("");const w=open("","_blank");if(!w){alert("Izinkan pop-up untuk mencetak.");return;}w.document.write(`<html><head><title>History Kedai Hawa</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:7px}th{background:#eee}</style></head><body><h1>KEDAI HAWA</h1><h2>History Pesanan</h2><table><tr><th>Order</th><th>Tanggal & Jam</th><th>Pelanggan</th><th>Pengiriman</th><th>Total</th><th>Status</th></tr>${rows}</table><h3>Jumlah Order: ${list.length}</h3><h3>Omzet: ${rupiah(omzet)}</h3><script>onload=()=>print()<\/script></body></html>`);w.document.close();}
 $("historyFrom").onchange=renderHistory;$("historyTo").onchange=renderHistory;$("historyStatus").onchange=renderHistory;$("downloadHistoryBtn").onclick=downloadHistory;$("printHistoryBtn").onclick=printHistory;
 
+function isAndroidWebView(){
+  const ua = navigator.userAgent || "";
+  return /\bwv\b/i.test(ua) ||
+         /; wv\)/i.test(ua) ||
+         (/Version\/4\.0/i.test(ua) && /Chrome\//i.test(ua) && /Mobile/i.test(ua));
+}
+
 function init(){
  onAuthStateChanged(auth,user=>{currentUser=user;if(user&&!user.isAnonymous){
   $("loginBox").classList.add("hidden");
   $("dashboard").classList.remove("hidden");
   $("logoutBtn").classList.remove("hidden");
-  $("notifyBtn").classList.remove("hidden");
-  if("Notification" in window && Notification.permission==="granted"){
-    $("notifyBtn").textContent="🔔 Notifikasi Aktif";
+  if(isAndroidWebView()){
+    $("notifyBtn").classList.add("hidden");
+  }else{
+    $("notifyBtn").classList.remove("hidden");
+    if("Notification" in window && Notification.permission==="granted"){
+      $("notifyBtn").textContent="🔔 Notifikasi Aktif";
+    }
   }
   listen();
   updatePrinterStatus();

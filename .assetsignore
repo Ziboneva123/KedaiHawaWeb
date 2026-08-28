@@ -2,3 +2,9 @@ node_modules
 .git
 .github
 *.zip
+*.json
+firebase.json
+firestore.rules
+wrangler.toml
+README.md
+README.mdd
