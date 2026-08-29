@@ -10,6 +10,34 @@ const KEDAI_HAWA_PICKUP_ADDRESS = "Jl. Adipati Karna / Jl. Kp. Pasir Limus, Wang
 const KEDAI_HAWA_MAP_URL = "https://maps.app.goo.gl/z2CWgq9P42W7hzZa9";
 const LALAMOVE_WEB_URL = "https://web.lalamove.com/";
 
+let storeOpen=true;
+
+function applyStoreStatus(){
+  const banner=$("storeClosedBanner");
+  const checkoutBtn=$("checkoutBtn");
+  const placeOrderBtn=$("placeOrderBtn");
+
+  if(banner) banner.classList.toggle("hidden",storeOpen);
+
+  if(checkoutBtn){
+    checkoutBtn.disabled=!storeOpen;
+    checkoutBtn.style.opacity=storeOpen?"1":"0.55";
+    checkoutBtn.title=storeOpen?"":"Toko sedang tutup";
+  }
+
+  if(placeOrderBtn){
+    placeOrderBtn.disabled=!storeOpen;
+    placeOrderBtn.style.opacity=storeOpen?"1":"0.55";
+  }
+}
+
+onSnapshot(doc(db,"settings","store"),snap=>{
+  storeOpen=snap.exists()?snap.data().isOpen !== false:true;
+  applyStoreStatus();
+},e=>{
+  console.error("Gagal membaca status toko:",e);
+});
+
 function totalQty(){ return cart.reduce((s,x)=>s+(Number(x.qty)||0),0); }
 function calcShippingFee(method){
   if(method === "direct") return totalQty() < 5 ? 5000 : 0;
@@ -165,7 +193,16 @@ function renderCart(){
 function open(id){$(id).classList.add("show")} function close(id){$(id).classList.remove("show")}
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest(".modal").classList.remove("show"));
 $("openCart").onclick=()=>{renderCart();open("cartModal")}; $("cartBarBtn").onclick=()=>{renderCart();open("cartModal")};
-$("checkoutBtn").onclick=()=>{if(!cart.length)return;renderCheckout();close("cartModal");open("checkoutModal")};
+$("checkoutBtn").onclick=()=>{
+  if(!storeOpen){
+    alert("🔴 TOKO SEDANG TUTUP\\n\\nPesanan sementara tidak dapat dibuat.");
+    return;
+  }
+  if(!cart.length)return;
+  renderCheckout();
+  close("cartModal");
+  open("checkoutModal");
+};
 $("deliveryMethod").onchange=updateDeliveryInfo;
 $("paymentMethod").onchange=updatePaymentInfo;
 $("openLalamoveBtn").onclick=()=>window.open(LALAMOVE_WEB_URL,"_blank");
@@ -191,6 +228,13 @@ function nextOrderNo(){
 }
 
 $("placeOrderBtn").onclick=async()=>{
+  if(!storeOpen){
+    $("checkoutMsg").textContent="🔴 Toko sedang tutup. Pesanan tidak dapat dibuat.";
+    $("checkoutMsg").className="notice error";
+    $("checkoutMsg").classList.remove("hidden");
+    return;
+  }
+
   if(!currentUid){$("checkoutMsg").textContent="Menunggu koneksi Firebase...";$("checkoutMsg").classList.remove("hidden");return;}
   const name=$("customerName").value.trim(), phone=$("customerPhone").value.trim(), method=$("deliveryMethod").value;
   if(!name||!phone){$("checkoutMsg").textContent="Nama dan nomor HP wajib diisi.";$("checkoutMsg").className="notice error";$("checkoutMsg").classList.remove("hidden");return;}

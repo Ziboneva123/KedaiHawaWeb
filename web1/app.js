@@ -7,7 +7,80 @@ import { enableOwnerPush, listenForegroundPush } from "../shared/fcm.js";
 const $=id=>document.getElementById(id);
 const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(n||0);
 let currentUser=null, menu=[], orders=[];
+let storeOpen=true;
 let ordersInitialized=false;
+
+function renderStoreStatus(){
+  const text=$("storeStatusText");
+  const btn=$("storeToggleBtn");
+  const card=$("storeStatusCard");
+  if(!text||!btn||!card)return;
+
+  if(storeOpen){
+    text.innerHTML="🟢 <b>TOKO AKTIF</b> — Customer dapat melakukan checkout.";
+    btn.textContent="🔴 Tutup Toko";
+    btn.className="btn primary";
+    card.style.borderColor="#17663b";
+  }else{
+    text.innerHTML="🔴 <b>TOKO TUTUP</b> — Checkout customer dinonaktifkan.";
+    btn.textContent="🟢 Buka Toko";
+    btn.className="btn secondary";
+    card.style.borderColor="#b42318";
+  }
+
+  btn.disabled=false;
+}
+
+function listenStoreStatus(){
+  const ref=doc(db,"settings","store");
+
+  onSnapshot(ref, async snap=>{
+    if(snap.exists()){
+      storeOpen=snap.data().isOpen !== false;
+    }else{
+      storeOpen=true;
+      try{
+        await setDoc(ref,{
+          isOpen:true,
+          updatedAt:new Date(),
+          updatedBy:currentUser?.email||"owner"
+        });
+      }catch(e){
+        console.error("Gagal membuat status toko:",e);
+      }
+    }
+    renderStoreStatus();
+  },e=>{
+    console.error("Status toko gagal dibaca:",e);
+    $("storeStatusText").textContent="Gagal membaca status toko.";
+  });
+}
+
+$("storeToggleBtn").onclick=async()=>{
+  if(!currentUser)return;
+
+  const next=!storeOpen;
+  const message=next
+    ? "Buka toko sekarang? Customer akan dapat checkout."
+    : "Tutup toko sekarang? Customer tidak dapat checkout.";
+
+  if(!confirm(message))return;
+
+  const btn=$("storeToggleBtn");
+  btn.disabled=true;
+  btn.textContent="Menyimpan...";
+
+  try{
+    await setDoc(doc(db,"settings","store"),{
+      isOpen:next,
+      updatedAt:new Date(),
+      updatedBy:currentUser.email||"owner"
+    },{merge:true});
+  }catch(e){
+    alert("Gagal mengubah status toko: "+e.message);
+    renderStoreStatus();
+  }
+};
 let notificationTimer=null;
 
 const seed=[
@@ -329,7 +402,8 @@ function isAndroidWebView(){
 }
 
 function init(){
- onAuthStateChanged(auth,user=>{currentUser=user;if(user&&!user.isAnonymous){
+ onAuthStateChanged(auth,user=>{currentUser=user;
+    listenStoreStatus();if(user&&!user.isAnonymous){
   $("loginBox").classList.add("hidden");
   $("dashboard").classList.remove("hidden");
   $("logoutBtn").classList.remove("hidden");

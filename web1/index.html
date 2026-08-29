@@ -13,6 +13,16 @@
     <div class="card"><div class="muted">Pesanan hari ini</div><div id="todayCount" style="font-size:30px;font-weight:950">0</div></div>
     <div class="card"><div class="muted">Omzet selesai</div><div id="todaySales" style="font-size:30px;font-weight:950">Rp0</div></div>
   </div>
+  <div class="card" id="storeStatusCard" style="margin:12px 0;border:2px solid #17663b">
+    <div class="row">
+      <div>
+        <div style="font-size:18px;font-weight:900">🏪 STATUS TOKO</div>
+        <div id="storeStatusText" class="muted" style="margin-top:4px">Memuat status toko...</div>
+      </div>
+      <button id="storeToggleBtn" class="btn primary" disabled>Memuat...</button>
+    </div>
+  </div>
+
   <div class="admin-nav"><button class="active" data-page="orders">📋 Pesanan</button><button data-page="history">📜 History</button><button data-page="menu">🍔 Menu</button></div>
   <div id="ordersPage" class="card"><div class="row"><h2>Pesanan</h2><span id="liveBadge" class="order-status status-ok">● REALTIME</span></div><div class="notice success" style="margin:10px 0">🖨️ <b>Auto Print aktif:</b> setiap pesanan baru akan otomatis mencetak <b>lampiran order</b> ke RPP02N melalui Cleanter. Struk dicetak terpisah.</div><div id="ordersList"></div></div>
   <div id="historyPage" class="card hidden"><div class="row"><h2>📜 History Pesanan</h2><div class="row gap"><button id="printHistoryBtn" class="btn secondary">🖨️ Print</button><button id="downloadHistoryBtn" class="btn primary">⬇️ Excel</button></div></div><div class="grid" style="margin:12px 0"><div><label>Dari tanggal</label><input id="historyFrom" type="date"></div><div><label>Sampai tanggal</label><input id="historyTo" type="date"></div><div><label>Status</label><select id="historyStatus"><option value="">Semua</option><option value="pending">Menunggu Konfirmasi</option><option value="confirmed">Dikonfirmasi</option><option value="processing">Diproses</option><option value="ready">Siap / Diantar</option><option value="delivered">Diserahkan ke Pelanggan</option><option value="received">Diterima Pelanggan</option><option value="cancelled">Dibatalkan</option></select></div></div><div id="historySummary" class="notice success"></div><div class="card" style="margin-top:12px;background:#fafcf9"><div class="row"><b>💰 Omzet sesuai filter</b><b id="historyOmzet">Rp0</b></div></div><div class="table-wrap" style="margin-top:12px"><table class="table"><thead><tr><th>Order</th><th>Tanggal & Jam</th><th>Pelanggan</th><th>Pengiriman</th><th>Total</th><th>Status</th></tr></thead><tbody id="historyRows"></tbody></table></div></div><div id="menuPage" class="card hidden"><div class="row"><h2>🍔 Kelola Menu</h2><div class="row gap"><button id="newMenuBtn" class="btn primary">＋ Tambah Menu</button><button id="seedBtn" class="btn secondary">Masukkan Data Menu Awal</button></div></div><div class="muted" style="margin:6px 0 12px">Edit untuk mengubah nama, harga, varian, stok, status, dan deskripsi. Hapus untuk mengurangi menu. Tambah Menu untuk menambah menu baru.</div><div class="table-wrap"><table class="table"><thead><tr><th>Menu</th><th>Kategori</th><th>Harga/Varian</th><th>Stok</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="menuRows"></tbody></table></div></div>
