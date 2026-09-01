@@ -162,13 +162,17 @@ function renderTabs(){
   document.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{activeCat=b.dataset.cat;renderTabs();renderMenu()});
 }
 
+function menuImageSrc(item){
+  return item?.imageData || item?.image || "";
+}
+
 function renderMenu(){
   const term=$("search").value.trim().toLowerCase();
   const list=menu.filter(x=>(activeCat==="Semua"||x.category===activeCat)&&(`${x.name} ${x.description||""}`).toLowerCase().includes(term));
   $("menuGrid").innerHTML=list.map(x=>{
     const variants=x.variants?.length ? `<select id="v-${x.id}">${x.variants.map((v,i)=>`<option value="${i}">${v.name} — ${rupiah(v.price)}</option>`).join("")}</select>` : "";
     const price=x.variants?.length ? `Mulai ${rupiah(Math.min(...x.variants.map(v=>v.price)))}` : rupiah(x.price);
-    return `<article class="card menu-card"><div class="menu-photo">${x.image?`<img src="${x.image}" alt="" style="width:100%;height:100%;object-fit:cover">`:"🍽️"}</div><div class="menu-body"><div class="row"><b>${x.name}</b><span class="price">${price}</span></div><div class="muted">${x.description||""}</div>${variants}<button class="btn primary" style="width:100%;margin-top:9px" data-add="${x.id}">+ Tambah</button></div></article>`;
+    return `<article class="card menu-card"><div class="menu-photo">${menuImageSrc(x)?`<img src="${x.imageData||x.image}" alt="${x.name||""}" style="width:100%;height:100%;object-fit:cover">`:"🍽️"}</div><div class="menu-body"><div class="row"><b>${x.name}</b><span class="price">${price}</span></div><div class="muted">${x.description||""}</div>${variants}<button class="btn primary" style="width:100%;margin-top:9px" data-add="${x.id}">+ Tambah</button></div></article>`;
   }).join("") || `<div class="card" style="grid-column:1/-1;text-align:center">Menu belum tersedia.</div>`;
   document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>addToCart(b.dataset.add));
 }
