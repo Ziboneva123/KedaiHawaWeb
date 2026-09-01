@@ -284,6 +284,44 @@ async function printOrder(o){
   }
 }
 
+
+function showLampiranMenu(o){
+  // Menu manual Lampiran: tidak menyentuh jalur Auto Print.
+  const old=document.getElementById("lampiranChoiceModal");
+  if(old) old.remove();
+  const number=(o.orderNo||"").split("-").at(-1)||"?";
+  const wrap=document.createElement("div");
+  wrap.id="lampiranChoiceModal";
+  wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:100000;padding:18px";
+  wrap.innerHTML=`<div style="width:min(380px,100%);background:#fff;border-radius:18px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.35)">
+    <div style="font-size:20px;font-weight:900;text-align:center">📎 LAMPIRAN ORDER</div>
+    <div style="text-align:center;color:#667085;margin:7px 0 18px">ORDER #${esc(number)}</div>
+    <button type="button" id="lampiranPreviewBtn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#edf5ef;color:#185c37;font-weight:900;font-size:16px;cursor:pointer">👁 Preview</button>
+    <button type="button" id="lampiranPrintBtn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#185c37;color:#fff;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px">🖨 Print</button>
+    <button type="button" id="lampiranCancelBtn" style="width:100%;padding:11px;border:0;background:transparent;color:#667085;font-weight:800;cursor:pointer;margin-top:6px">Batal</button>
+  </div>`;
+  document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.querySelector("#lampiranCancelBtn").onclick=close;
+  wrap.querySelector("#lampiranPreviewBtn").onclick=()=>{
+    close();
+    browserPrint(buildBrowserOrderHtml(o),"Lampiran Order #"+number);
+  };
+  wrap.querySelector("#lampiranPrintBtn").onclick=async()=>{
+    const btn=wrap.querySelector("#lampiranPrintBtn");
+    btn.disabled=true; btn.textContent="⏳ Mencetak...";
+    try{
+      await cleanterPrint(cleanterOrderPayload(o));
+      close();
+    }catch(e){
+      console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
+      close();
+      browserPrint(buildBrowserOrderHtml(o),"Lampiran Order #"+number);
+    }
+  };
+  wrap.addEventListener("click",e=>{if(e.target===wrap) close();});
+}
+
 async function autoPrintNewOrder(o){
   const key="kedaiHawaPrintedOrders";
   let printed=[];
@@ -484,27 +522,12 @@ function renderMenu(){
 function renderOrders(){
  const pending=orders.filter(o=>o.status==="pending").length; $("newCount").textContent=pending;$("todayCount").textContent=orders.length;
  const done=orders.filter(o=>o.status==="received"||o.status==="completed").reduce((s,o)=>s+(o.total||0),0);$("todaySales").textContent=rupiah(done);
- $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button type="button" class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
+ $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
  document.querySelectorAll("[data-status]").forEach(s=>s.onchange=async()=>updateDoc(doc(db,"orders",s.dataset.status),{status:s.value,statusUpdatedAt:serverTimestamp()}));
- document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) printOrder(o);});
+ document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) showLampiranMenu(o);});
  document.querySelectorAll("[data-print-receipt]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printReceipt);if(o) printReceipt(o);});
 }
 function label(s){return({pending:"Menunggu Konfirmasi",confirmed:"Dikonfirmasi",processing:"Sedang Diproses",ready:"Siap / Diantar",delivered:"Diserahkan ke Pelanggan",received:"Diterima Pelanggan",cancelled:"Dibatalkan"})[s]||s}
-
-// Handler Lampiran yang tahan terhadap render ulang daftar order dan klik/tap Android.
-// Tidak menyentuh jalur Auto Print order baru.
-let attachmentClickGuard=false;
-document.addEventListener("click",e=>{
-  const b=e.target.closest?.("[data-print-order]");
-  if(!b || attachmentClickGuard) return;
-  e.preventDefault();
-  e.stopPropagation();
-  const o=orders.find(x=>String(x.id)===String(b.dataset.printOrder));
-  if(!o){ alert("Data order tidak ditemukan. Silakan refresh halaman."); return; }
-  attachmentClickGuard=true;
-  try{ showAttachmentMenu(o); }catch(err){ console.error("Lampiran gagal dibuka:",err); alert("Lampiran gagal dibuka: "+(err?.message||err)); }
-  setTimeout(()=>{attachmentClickGuard=false;},250);
-},true);
 
 async function seedMenu(){
  for(let i=0;i<seed.length;i++){const [id,name,category,price,variants]=seed[i];await setDoc(doc(db,"menu",id),{name,category,price:price??null,variants:variants||null,stock:null,active:true,description:"",sort:i+1,updatedAt:serverTimestamp()},{merge:true});}
