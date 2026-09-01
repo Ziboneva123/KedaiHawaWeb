@@ -305,7 +305,7 @@ function showLampiranMenu(o){
   wrap.querySelector("#lampiranCancelBtn").onclick=close;
   wrap.querySelector("#lampiranPreviewBtn").onclick=()=>{
     close();
-    browserPrint(buildBrowserOrderHtml(o),"Lampiran Order #"+number);
+    browserOrderPrint(o);
   };
   wrap.querySelector("#lampiranPrintBtn").onclick=async()=>{
     const btn=wrap.querySelector("#lampiranPrintBtn");
@@ -316,7 +316,7 @@ function showLampiranMenu(o){
     }catch(e){
       console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
       close();
-      browserPrint(buildBrowserOrderHtml(o),"Lampiran Order #"+number);
+      browserOrderPrint(o);
     }
   };
   wrap.addEventListener("click",e=>{if(e.target===wrap) close();});
