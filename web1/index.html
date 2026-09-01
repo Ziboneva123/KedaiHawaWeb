@@ -324,6 +324,67 @@ function browserOrderPrint(o){
   return browserPrint(html,"Lampiran Order #"+number);
 }
 
+function showLampiranMenu(o){
+  const old=document.getElementById("lampiranChoiceModal");
+  if(old)old.remove();
+
+  const number=(o.orderNo||"").split("-").at(-1)||"?";
+  const wrap=document.createElement("div");
+  wrap.id="lampiranChoiceModal";
+  wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;z-index:100000;padding:18px;box-sizing:border-box;touch-action:auto";
+
+  wrap.innerHTML=`<div style="width:min(390px,100%);background:#fff;border-radius:18px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box">
+    <div style="font-size:20px;font-weight:900;text-align:center">📎 LAMPIRAN ORDER</div>
+    <div style="text-align:center;color:#667085;margin:7px 0 18px">ORDER #${esc(number)}</div>
+
+    <button type="button" id="lampiranPreviewBtn" class="btn secondary"
+      style="display:block;width:100%;min-height:48px;padding:13px;border-radius:11px;font-weight:900;font-size:16px;cursor:pointer;touch-action:manipulation">
+      👁 Preview
+    </button>
+
+    <button type="button" id="lampiranPrintBtn" class="btn primary"
+      style="display:block;width:100%;min-height:48px;padding:13px;border-radius:11px;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px;touch-action:manipulation">
+      🖨 Print
+    </button>
+
+    <button type="button" id="lampiranCancelBtn"
+      style="display:block;width:100%;min-height:44px;padding:11px;border:0;background:transparent;color:#667085;font-weight:800;font-size:15px;cursor:pointer;margin-top:6px;touch-action:manipulation">
+      Batal
+    </button>
+  </div>`;
+
+  document.body.appendChild(wrap);
+
+  const close=()=>{if(wrap.parentNode)wrap.remove();};
+
+  document.getElementById("lampiranCancelBtn").onclick=close;
+
+  document.getElementById("lampiranPreviewBtn").onclick=()=>{
+    close();
+    browserOrderPrint(o);
+  };
+
+  document.getElementById("lampiranPrintBtn").onclick=async()=>{
+    const btn=document.getElementById("lampiranPrintBtn");
+    if(!btn)return;
+    btn.disabled=true;
+    btn.textContent="⏳ Mencetak...";
+
+    try{
+      await cleanterPrint(cleanterOrderPayload(o));
+      close();
+    }catch(e){
+      console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
+      close();
+      browserOrderPrint(o);
+    }
+  };
+
+  wrap.onclick=e=>{
+    if(e.target===wrap)close();
+  };
+}
+
 async function printOrder(o){
   try{
     await cleanterPrint(cleanterOrderPayload(o));
@@ -534,9 +595,13 @@ function renderMenu(){
 function renderOrders(){
  const pending=orders.filter(o=>o.status==="pending").length; $("newCount").textContent=pending;$("todayCount").textContent=orders.length;
  const done=orders.filter(o=>o.status==="received"||o.status==="completed").reduce((s,o)=>s+(o.total||0),0);$("todaySales").textContent=rupiah(done);
- $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
+ $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button type="button" class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
  document.querySelectorAll("[data-status]").forEach(s=>s.onchange=async()=>updateDoc(doc(db,"orders",s.dataset.status),{status:s.value,statusUpdatedAt:serverTimestamp()}));
- document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) printOrder(o);});
+ document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{
+  const o=orders.find(x=>x.id===b.dataset.printOrder);
+  if(!o)return;
+  showLampiranMenu(o);
+});
  document.querySelectorAll("[data-print-receipt]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printReceipt);if(o) printReceipt(o);});
 }
 function label(s){return({pending:"Menunggu Konfirmasi",confirmed:"Dikonfirmasi",processing:"Sedang Diproses",ready:"Siap / Diantar",delivered:"Diserahkan ke Pelanggan",received:"Diterima Pelanggan",cancelled:"Dibatalkan"})[s]||s}
