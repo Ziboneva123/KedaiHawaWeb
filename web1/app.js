@@ -201,7 +201,6 @@ async function cleanterHealth(){
 function cleanterOrderPayload(o){
   const num=(o.orderNo||"").split("-").at(-1)||"?";
   const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
-  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
   const content=[
     {type:"text",text:"KEDAI HAWA",align:"center",bold:true,size:"large"},
     {type:"text",text:"LAMPIRAN ORDER",align:"center",bold:true},
@@ -225,9 +224,9 @@ function cleanterOrderPayload(o){
   content.push({type:"row",left:"SUBTOTAL",right:rupiah(o.subtotal ?? o.total),bold:true});
   if(Number(o.shippingFee)>0) content.push({type:"row",left:"ONGKIR",right:rupiah(o.shippingFee)});
   content.push({type:"row",left:"TOTAL",right:rupiah(o.total),bold:true});
-  content.push({type:"divider"},{type:"text",text:"PENGIRIMAN: "+String(delivery),bold:true});
-  content.push({type:"text",text:"PEMBAYARAN: "+String(payment),bold:true});
-  content.push({type:"text",text:"ALAMAT: "+String(o.address||"-")});
+  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
+  content.push({type:"divider"},{type:"text",text:"PENGIRIMAN: "+String(delivery),bold:true},{type:"text",text:"PEMBAYARAN: "+String(payment),bold:true});
+  if(o.address) content.push({type:"text",text:"ALAMAT: "+String(o.address)});
   if(o.deliveryNote) content.push({type:"text",text:"CATATAN ALAMAT: "+String(o.deliveryNote)});
   if(o.orderNote) content.push({type:"text",text:"CATATAN PESANAN: "+String(o.orderNote)});
   content.push({type:"divider"},{type:"text",text:"*** ORDER BARU ***",align:"center",bold:true},{type:"text",text:"Kedai Hawa",align:"center"},{type:"feed",lines:3});
@@ -272,25 +271,54 @@ function browserOrderPrint(o){
   const number=(o.orderNo||"").split("-").at(-1)||"?";
   const items=(o.items||[]).map(i=>{const q=Number(i.qty)||0,p=Number(i.price)||0;return `<div style="padding:4px 0;border-bottom:1px dotted #777"><b>${esc(i.name||"")}${i.variant?` (${esc(i.variant)})`:""}</b><br>${q} x ${rupiah(p)} <b style="float:right">${rupiah(q*p)}</b></div>`;}).join("");
   const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
-  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>__TITLE__</title><style>@page{size:58mm auto;margin:0}body{width:58mm;margin:0;padding:3mm 2.5mm;font:11px Arial;color:#000;box-sizing:border-box}.c{text-align:center}.t{font-size:18px;font-weight:900}.o{font-size:16px;font-weight:900}.d{border-top:1px dashed #000;margin:7px 0}.n{font-size:10px;white-space:pre-wrap}</style></head><body><div class="c t">KEDAI HAWA</div><div class="c"><b>LAMPIRAN ORDER</b></div><div class="d"></div><div class="c o">ORDER #${esc(number)}</div><div class="c">${esc(receiptDateTime(o.createdAt))}</div><div class="d"></div><b>PELANGGAN</b><br>${esc(o.customerName||"-")}<br>HP : ${esc(o.customerPhone||"-")}<div class="d"></div><b>DAFTAR PESANAN</b>${items}<div class="d"></div><b>PENGIRIMAN:</b> ${esc(delivery)}<div style="margin-top:4px"><b>PEMBAYARAN:</b> ${esc(payment)}</div><div style="margin-top:4px"><b>ALAMAT:</b><div class="n">${esc(o.address||"-")}</div></div>${o.deliveryNote?`<div style="margin-top:4px"><b>CATATAN ALAMAT:</b><div class="n">${esc(o.deliveryNote)}</div></div>`:""}${o.orderNote?`<div style="margin-top:4px"><b>CATATAN PESANAN:</b><div class="n">${esc(o.orderNote)}</div></div>`:""}<div class="d"></div><div class="c"><b>*** ORDER BARU ***</b><br>Kedai Hawa</div><script>window.onload=()=>setTimeout(()=>window.print(),250);window.onafterprint=()=>setTimeout(()=>window.close(),300);<\/script></body></html>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>__TITLE__</title><style>@page{size:58mm auto;margin:0}body{width:58mm;margin:0;padding:3mm 2.5mm;font:11px Arial;color:#000;box-sizing:border-box}.c{text-align:center}.t{font-size:18px;font-weight:900}.o{font-size:16px;font-weight:900}.d{border-top:1px dashed #000;margin:7px 0}.n{font-size:10px;white-space:pre-wrap}</style></head><body><div class="c t">KEDAI HAWA</div><div class="c"><b>LAMPIRAN ORDER</b></div><div class="d"></div><div class="c o">ORDER #${esc(number)}</div><div class="c">${esc(receiptDateTime(o.createdAt))}</div><div class="d"></div><b>PELANGGAN</b><br>${esc(o.customerName||"-")}<br>HP : ${esc(o.customerPhone||"-")}<div class="d"></div><b>DAFTAR PESANAN</b>${items}<div class="d"></div><b>PENGIRIMAN:</b> ${esc(delivery)}${o.address?`<div style="margin-top:4px"><b>ALAMAT:</b><div class="n">${esc(o.address)}</div></div>`:""}${o.deliveryNote?`<div style="margin-top:4px"><b>CATATAN ALAMAT:</b><div class="n">${esc(o.deliveryNote)}</div></div>`:""}${o.orderNote?`<div style="margin-top:4px"><b>CATATAN PESANAN:</b><div class="n">${esc(o.orderNote)}</div></div>`:""}<div class="d"></div><div class="c"><b>*** ORDER BARU ***</b><br>Kedai Hawa</div><script>window.onload=()=>setTimeout(()=>window.print(),250);window.onafterprint=()=>setTimeout(()=>window.close(),300);<\/script></body></html>`;
   return browserPrint(html,"Lampiran Order #"+number);
 }
 
-async function printOrder(o, allowBrowserFallback=false){
+function attachmentHtml(o, autoPrint=false){
+  const number=(o.orderNo||"").split("-").at(-1)||"?";
+  const items=(o.items||[]).map(i=>{const q=Number(i.qty)||0,p=Number(i.price)||0;return `<div style="padding:4px 0;border-bottom:1px dotted #777"><b>${esc(i.name||"")}${i.variant?` (${esc(i.variant)})`:""}</b><br>${q} x ${rupiah(p)} <b style="float:right">${rupiah(q*p)}</b></div>`;}).join("");
+  const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
+  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>__TITLE__</title><style>@page{size:58mm auto;margin:0}body{width:58mm;margin:0;padding:3mm 2.5mm;font:11px Arial;color:#000;box-sizing:border-box}.c{text-align:center}.t{font-size:18px;font-weight:900}.o{font-size:16px;font-weight:900}.d{border-top:1px dashed #000;margin:7px 0}.n{font-size:10px;white-space:pre-wrap}</style></head><body><div class="c t">KEDAI HAWA</div><div class="c"><b>LAMPIRAN ORDER</b></div><div class="d"></div><div class="c o">ORDER #${esc(number)}</div><div class="c">${esc(receiptDateTime(o.createdAt))}</div><div class="d"></div><b>PELANGGAN</b><br>${esc(o.customerName||"-")}<br>HP : ${esc(o.customerPhone||"-")}<div class="d"></div><b>PENGIRIMAN:</b> ${esc(delivery)}<br><b>PEMBAYARAN:</b> ${esc(payment)}${o.address?`<div style="margin-top:4px"><b>ALAMAT:</b><div class="n">${esc(o.address)}</div></div>`:""}<div class="d"></div><b>DAFTAR PESANAN</b>${items}<div class="d"></div><b>SUBTOTAL:</b> ${rupiah(o.subtotal??o.total)}${Number(o.shippingFee)>0?`<br><b>ONGKIR:</b> ${rupiah(o.shippingFee)}`:""}<br><b>TOTAL:</b> ${rupiah(o.total)}${o.deliveryNote?`<div style="margin-top:4px"><b>CATATAN ALAMAT:</b><div class="n">${esc(o.deliveryNote)}</div></div>`:""}${o.orderNote?`<div style="margin-top:4px"><b>CATATAN PESANAN:</b><div class="n">${esc(o.orderNote)}</div></div>`:""}<div class="d"></div><div class="c"><b>*** ORDER BARU ***</b><br>Kedai Hawa</div>${autoPrint?`<script>window.onload=()=>setTimeout(()=>window.print(),250);window.onafterprint=()=>setTimeout(()=>window.close(),300);<\/script>`:""}</body></html>`;
+}
+
+function browserOrderPreview(o){
+  const w=window.open("","_blank","width=420,height=800");
+  if(!w){alert("Preview diblokir browser. Izinkan pop-up untuk situs Kedai Hawa.");return false;}
+  w.document.write(attachmentHtml(o,false).replace("__TITLE__",esc("Preview Lampiran Order #"+((o.orderNo||"").split("-").at(-1)||"?"))));
+  w.document.close();
+  return true;
+}
+
+function showAttachmentMenu(o){
+  const old=document.getElementById("khAttachmentMenu"); if(old) old.remove();
+  const wrap=document.createElement("div"); wrap.id="khAttachmentMenu";
+  wrap.innerHTML=`<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px"><div style="background:#fff;border-radius:16px;padding:20px;width:min(360px,92vw);box-shadow:0 10px 35px rgba(0,0,0,.3);text-align:center"><h3 style="margin:0 0 6px">📎 Lampiran Order</h3><div style="font-size:13px;color:#666;margin-bottom:18px">Pilih tindakan untuk order ini</div><div style="display:flex;gap:10px"><button id="khAttachPreview" style="flex:1;padding:13px;border:0;border-radius:10px;background:#eef7f0;color:#17663b;font-weight:800;font-size:15px">👁 Preview</button><button id="khAttachPrint" style="flex:1;padding:13px;border:0;border-radius:10px;background:#17663b;color:#fff;font-weight:800;font-size:15px">🖨 Print</button></div><button id="khAttachCancel" style="margin-top:10px;width:100%;padding:10px;border:0;background:#eee;border-radius:10px;font-weight:700">Batal</button></div></div>`;
+  document.body.appendChild(wrap);
+  const close=()=>wrap.remove();
+  wrap.querySelector("#khAttachPreview").onclick=()=>{close();browserOrderPreview(o);};
+  wrap.querySelector("#khAttachPrint").onclick=async()=>{close(); const b=document.querySelector(`[data-print-order="${CSS.escape(o.id)}"]`); if(b){b.disabled=true;b.textContent="⏳ Print...";} try{await manualPrintOrder(o);}finally{if(b){b.disabled=false;b.textContent="📎 Lampiran";}}};
+  wrap.querySelector("#khAttachCancel").onclick=close;
+  wrap.firstElementChild.addEventListener("click",e=>{if(e.target===wrap.firstElementChild)close();});
+}
+
+async function manualPrintOrder(o){
   try{
     await cleanterPrint(cleanterOrderPayload(o));
-    const s=$("printerStatus");
-    if(s){s.textContent="🟢 Lampiran order tercetak melalui Cleanter";s.className="notice success";}
     return true;
   }catch(e){
-    console.error("CLEANter GAGAL",e);
-    if(allowBrowserFallback){
-      const ok=browserOrderPrint(o);
-      const s=$("printerStatus");
-      if(s){s.textContent=ok?"🟡 Lampiran dibuka lewat preview cetak browser":"🔴 Preview cetak diblokir browser";s.className=ok?"notice":"notice error";}
-      return ok;
-    }
+    console.warn("PRINT LAMPIRAN CLEANter GAGAL, fallback browser",e);
+    return browserPrint(attachmentHtml(o,true),"Lampiran Order #"+((o.orderNo||"").split("-").at(-1)||"?"));
+  }
+}
+
+async function printOrder(o){
+  try{
+    await cleanterPrint(cleanterOrderPayload(o));
+    return true;
+  }catch(e){
+    console.error("AUTO PRINT CLEANter GAGAL",e);
     return false;
   }
 }
@@ -497,7 +525,7 @@ function renderOrders(){
  const done=orders.filter(o=>o.status==="received"||o.status==="completed").reduce((s,o)=>s+(o.total||0),0);$("todaySales").textContent=rupiah(done);
  $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
  document.querySelectorAll("[data-status]").forEach(s=>s.onchange=async()=>updateDoc(doc(db,"orders",s.dataset.status),{status:s.value,statusUpdatedAt:serverTimestamp()}));
- document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) printOrder(o,true);});
+ document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) showAttachmentMenu(o);});
  document.querySelectorAll("[data-print-receipt]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printReceipt);if(o) printReceipt(o);});
 }
 function label(s){return({pending:"Menunggu Konfirmasi",confirmed:"Dikonfirmasi",processing:"Sedang Diproses",ready:"Siap / Diantar",delivered:"Diserahkan ke Pelanggan",received:"Diterima Pelanggan",cancelled:"Dibatalkan"})[s]||s}
