@@ -43,7 +43,17 @@ padding:14px;">
   </div>
   <button id="goToOrdersBtn" class="btn primary" style="width:100%;margin-top:10px">📋 Lihat Pesanan</button>
 </div>
-<div id="editModal" class="modal"><div class="sheet"><div class="row"><h2 id="editTitle">Edit Menu</h2><button class="btn ghost" data-close>✕</button></div><input type="hidden" id="editId"><input type="hidden" id="editMode" value="edit"><label>Nama Menu</label><input id="editName" placeholder="Contoh: Mie Tul"><label>Kategori</label><input id="editCategory" placeholder="Makanan / Minuman / Frozen"><label>Harga</label><input id="editPrice" type="number" inputmode="numeric" min="0" placeholder="12000"><label>Varian (opsional)</label><textarea id="editVariants" rows="3" placeholder="Varian 1|6000&#10;Varian 2|10000"></textarea><div class="muted" style="font-size:12px;margin-top:4px">Satu varian per baris dengan format: Nama Varian|Harga</div><label>Stok (kosong = belum diatur)</label><input id="editStock" type="number" min="0"><label>Urutan Tampil</label><input id="editSort" type="number" min="1"><label>Status</label><select id="editActive"><option value="true">Tersedia</option><option value="false">Nonaktif</option></select><label>Deskripsi</label><textarea id="editDesc" rows="2" placeholder="Deskripsi singkat menu"></textarea><button id="saveMenuBtn" class="btn primary" style="width:100%;margin-top:12px">Simpan Perubahan</button><div id="editMsg" class="notice hidden" style="margin-top:10px"></div></div></div>
+<div id="editModal" class="modal"><div class="sheet"><div class="row"><h2 id="editTitle">Edit Menu</h2><button class="btn ghost" data-close>✕</button></div><input type="hidden" id="editId"><input type="hidden" id="editMode" value="edit"><label>Nama Menu</label><input id="editName" placeholder="Contoh: Mie Tul"><label>Kategori</label><input id="editCategory" placeholder="Makanan / Minuman / Frozen"><label>Harga</label><input id="editPrice" type="number" inputmode="numeric" min="0" placeholder="12000"><label>Varian (opsional)</label><textarea id="editVariants" rows="3" placeholder="Varian 1|6000&#10;Varian 2|10000"></textarea><div class="muted" style="font-size:12px;margin-top:4px">Satu varian per baris dengan format: Nama Varian|Harga</div><label>Stok (kosong = belum diatur)</label><input id="editStock" type="number" min="0"><label>Urutan Tampil</label><input id="editSort" type="number" min="1"><label>Status</label><select id="editActive"><option value="true">Tersedia</option><option value="false">Nonaktif</option></select><label>Deskripsi</label><textarea id="editDesc" rows="2" placeholder="Deskripsi singkat menu"></textarea>
+<label>Gambar Menu</label>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+  <input id="editImageFile" type="file" accept="image/*" style="flex:1;min-width:220px">
+  <button id="removeImageBtn" type="button" class="btn ghost">🗑️ Hapus Gambar</button>
+</div>
+<div class="muted" style="font-size:12px;margin-top:4px">Pilih foto dari HP. Gambar akan dikompres otomatis agar ringan dan disimpan bersama data menu.</div>
+<div id="editImagePreviewWrap" class="hidden" style="margin-top:10px;text-align:center">
+  <img id="editImagePreview" alt="Preview gambar menu" style="max-width:180px;max-height:180px;border-radius:12px;object-fit:cover;border:1px solid #d0d5dd">
+</div>
+<button id="saveMenuBtn" class="btn primary" style="width:100%;margin-top:12px">Simpan Perubahan</button><div id="editMsg" class="notice hidden" style="margin-top:10px"></div></div></div>
 <script type="module">window.addEventListener("error",e=>console.error("Kedai Hawa error:",e.error||e.message));</script><script type="module">
 import {
   db, auth, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy,
@@ -56,6 +66,7 @@ const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",m
 let currentUser=null, menu=[], orders=[];
 let storeOpen=true;
 let ordersInitialized=false;
+let editImageData="";
 
 function renderStoreStatus(){
   const text=$("storeStatusText");
@@ -629,6 +640,10 @@ function openEdit(id){
  $("editId").value=id;$("editMode").value="edit";
  $("editName").value=x.name||"";$("editCategory").value=x.category||"";$("editPrice").value=x.price??"";
  $("editStock").value=x.stock??"";$("editActive").value=x.active===false?"false":"true";$("editDesc").value=x.description||"";
+ editImageData=x.imageData||"";
+ $("editImageFile").value="";
+ $("editImagePreview").src=editImageData||"";
+ $("editImagePreviewWrap").classList.toggle("hidden",!editImageData);
  $("editVariants").value=(x.variants||[]).map(v=>`${v.name}|${v.price}`).join("\n");
  $("editSort").value=x.sort??"";
  $("editTitle").textContent="Edit Menu";$("saveMenuBtn").textContent="Simpan Perubahan";
@@ -638,9 +653,59 @@ function openEdit(id){
 function openNewMenu(){
  $("editId").value="";$("editMode").value="new";
  ["editName","editCategory","editPrice","editStock","editDesc","editVariants","editSort"].forEach(id=>$(id).value="");
+ $("editImageFile").value="";
+ editImageData="";
+ $("editImagePreview").src="";
+ $("editImagePreviewWrap").classList.add("hidden");
  $("editActive").value="true";$("editTitle").textContent="Tambah Menu";$("saveMenuBtn").textContent="Tambah Menu";
  $("editMsg").classList.add("hidden");$("editModal").classList.add("show");
 }
+
+async function compressMenuImage(file){
+  if(!file)return "";
+  if(!file.type.startsWith("image/"))throw new Error("File harus berupa gambar.");
+  const maxSide=800, quality=0.72;
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((resolve,reject)=>{
+      const im=new Image();
+      im.onload=()=>resolve(im);
+      im.onerror=()=>reject(new Error("Gambar tidak dapat dibaca."));
+      im.src=url;
+    });
+    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+    const w=Math.max(1,Math.round(img.naturalWidth*scale));
+    const h=Math.max(1,Math.round(img.naturalHeight*scale));
+    const c=document.createElement("canvas");
+    c.width=w;c.height=h;
+    const ctx=c.getContext("2d");
+    ctx.drawImage(img,0,0,w,h);
+    return c.toDataURL("image/jpeg",quality);
+  }finally{URL.revokeObjectURL(url);}
+}
+
+$("editImageFile").onchange=async()=>{
+  const file=$("editImageFile").files?.[0];
+  if(!file)return;
+  try{
+    editImageData=await compressMenuImage(file);
+    $("editImagePreview").src=editImageData;
+    $("editImagePreviewWrap").classList.remove("hidden");
+  }catch(e){
+    editImageData="";
+    $("editImagePreview").src="";
+    $("editImagePreviewWrap").classList.add("hidden");
+    alert("Gagal memproses gambar: "+e.message);
+    $("editImageFile").value="";
+  }
+};
+
+$("removeImageBtn").onclick=()=>{
+  editImageData="";
+  $("editImageFile").value="";
+  $("editImagePreview").src="";
+  $("editImagePreviewWrap").classList.add("hidden");
+};
 
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest(".modal").classList.remove("show"));
 $("newMenuBtn").onclick=openNewMenu;
@@ -662,6 +727,7 @@ $("saveMenuBtn").onclick=async()=>{
      stock:stockVal===""?null:Number(stockVal),
      active:$("editActive").value==="true",
      description:$("editDesc").value.trim(),
+     imageData:editImageData||"",
      sort:sortVal===""?(isNew?(Math.max(0,...menu.map(m=>Number(m.sort)||0))+1):999):Number(sortVal),
      updatedAt:serverTimestamp()
    };
