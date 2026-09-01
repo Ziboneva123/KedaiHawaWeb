@@ -44,5 +44,573 @@ padding:14px;">
   <button id="goToOrdersBtn" class="btn primary" style="width:100%;margin-top:10px">📋 Lihat Pesanan</button>
 </div>
 <div id="editModal" class="modal"><div class="sheet"><div class="row"><h2 id="editTitle">Edit Menu</h2><button class="btn ghost" data-close>✕</button></div><input type="hidden" id="editId"><input type="hidden" id="editMode" value="edit"><label>Nama Menu</label><input id="editName" placeholder="Contoh: Mie Tul"><label>Kategori</label><input id="editCategory" placeholder="Makanan / Minuman / Frozen"><label>Harga</label><input id="editPrice" type="number" inputmode="numeric" min="0" placeholder="12000"><label>Varian (opsional)</label><textarea id="editVariants" rows="3" placeholder="Varian 1|6000&#10;Varian 2|10000"></textarea><div class="muted" style="font-size:12px;margin-top:4px">Satu varian per baris dengan format: Nama Varian|Harga</div><label>Stok (kosong = belum diatur)</label><input id="editStock" type="number" min="0"><label>Urutan Tampil</label><input id="editSort" type="number" min="1"><label>Status</label><select id="editActive"><option value="true">Tersedia</option><option value="false">Nonaktif</option></select><label>Deskripsi</label><textarea id="editDesc" rows="2" placeholder="Deskripsi singkat menu"></textarea><button id="saveMenuBtn" class="btn primary" style="width:100%;margin-top:12px">Simpan Perubahan</button><div id="editMsg" class="notice hidden" style="margin-top:10px"></div></div></div>
-<script type="module">window.addEventListener("error",e=>console.error("Kedai Hawa error:",e.error||e.message));</script><script type="module" src="./app.js"></script>
+<script type="module">window.addEventListener("error",e=>console.error("Kedai Hawa error:",e.error||e.message));</script><script type="module">
+import {
+  db, auth, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy,
+  signInWithEmailAndPassword, onAuthStateChanged, signOut, serverTimestamp
+} from "../shared/firebase.js";
+import { enableOwnerPush, listenForegroundPush } from "../shared/fcm.js";
+
+const $=id=>document.getElementById(id);
+const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(n||0);
+let currentUser=null, menu=[], orders=[];
+let storeOpen=true;
+let ordersInitialized=false;
+
+function renderStoreStatus(){
+  const text=$("storeStatusText");
+  const btn=$("storeToggleBtn");
+  const card=$("storeStatusCard");
+  if(!text||!btn||!card)return;
+
+  if(storeOpen){
+    text.innerHTML="🟢 <b>TOKO AKTIF</b> — Customer dapat melakukan checkout.";
+    btn.textContent="🔴 Tutup Toko";
+    btn.className="btn primary";
+    card.style.borderColor="#17663b";
+  }else{
+    text.innerHTML="🔴 <b>TOKO TUTUP</b> — Checkout customer dinonaktifkan.";
+    btn.textContent="🟢 Buka Toko";
+    btn.className="btn secondary";
+    card.style.borderColor="#b42318";
+  }
+
+  btn.disabled=false;
+}
+
+function listenStoreStatus(){
+  const ref=doc(db,"settings","store");
+
+  onSnapshot(ref, async snap=>{
+    if(snap.exists()){
+      storeOpen=snap.data().isOpen !== false;
+    }else{
+      storeOpen=true;
+      try{
+        await setDoc(ref,{
+          isOpen:true,
+          updatedAt:new Date(),
+          updatedBy:currentUser?.email||"owner"
+        });
+      }catch(e){
+        console.error("Gagal membuat status toko:",e);
+      }
+    }
+    renderStoreStatus();
+  },e=>{
+    console.error("Status toko gagal dibaca:",e);
+    $("storeStatusText").textContent="Gagal membaca status toko.";
+  });
+}
+
+$("storeToggleBtn").onclick=async()=>{
+  if(!currentUser)return;
+
+  const next=!storeOpen;
+  const message=next
+    ? "Buka toko sekarang? Customer akan dapat checkout."
+    : "Tutup toko sekarang? Customer tidak dapat checkout.";
+
+  if(!confirm(message))return;
+
+  const btn=$("storeToggleBtn");
+  btn.disabled=true;
+  btn.textContent="Menyimpan...";
+
+  try{
+    await setDoc(doc(db,"settings","store"),{
+      isOpen:next,
+      updatedAt:new Date(),
+      updatedBy:currentUser.email||"owner"
+    },{merge:true});
+  }catch(e){
+    alert("Gagal mengubah status toko: "+e.message);
+    renderStoreStatus();
+  }
+};
+let notificationTimer=null;
+
+const seed=[
+["mietul","MieTul","Makanan",12000],
+["burger-6","Burger","Makanan",null,[{name:"Varian 1",price:6000}]],
+["burger-10","Burger","Makanan",null,[{name:"Varian 2",price:10000}]],
+["paket-burger","Paket Burger","Makanan",15000],
+["lumpia-beef","Lumpia Beef","Makanan",10000],
+["l-beef-mentai","L. Beef Mentai","Makanan",12000],
+["potato-beef-mentai","Potato Beef Mentai","Makanan",15000],
+["kentang","Kentang","Makanan",10000],
+["piscok","Piscok","Makanan",10000],
+["kebab","Kebab","Makanan",10000],
+["lumpia-tahu","Lumpia Tahu","Makanan",10000],
+["lumpia-basah","Lumpia Basah","Makanan",10000],
+["sakana-siomay","Sakana Siomay","Makanan",10000],
+["teajus-gula-batu","Teajus Gula Batu","Minuman",3000],
+["beng-beng","Beng Beng","Minuman",5000],
+["pop-ice-strawberry","Pop Ice Strawberry","Minuman",4000],
+["pop-ice-mangga","Pop Ice Mangga","Minuman",4000],
+["pop-ice-durian","Pop Ice Durian","Minuman",4000],
+["pop-ice-taro","Pop Ice Taro","Minuman",4000],
+["pop-ice-cokelat","Pop Ice Cokelat","Minuman",4000],
+["pop-ice-vanilla-blue","Pop Ice Vanilla Blue","Minuman",4000],
+["milo","Milo","Minuman",5000],
+["susu-cokelat","Susu Cokelat","Minuman",4000],
+["susu-putih","Susu Putih","Minuman",4000],
+["marimas-anggur","Marimas Anggur","Minuman",3000],
+["marimas-strawberry","Marimas Strawberry","Minuman",3000],
+["marimas-mangga","Marimas Mangga","Minuman",3000],
+["nutrisari","Nutrisari","Minuman",4000],
+["teh-tarik","Teh Tarik","Minuman",5000],
+["goodday-frezze","Goodday Frezze","Minuman",5000],
+["goodday-capucino","Goodday Capucino","Minuman",5000],
+["kopi-kapal-api","Kopi Kapal Api","Minuman",4000],
+["kopi-luwak","Kopi Luwak","Minuman",4000],
+["kentang-gogo-1kg","Kentang Gogo 1kg","Frozen",32000],
+["sosis-salam-long-500gr","Sosis Salam Long 500gr","Frozen",20000],
+["baso-warisan-ab","Baso Warisan AB","Frozen",33000],
+["vitalia-kecil","Vitalia kecil","Frozen",13000],
+["yona-beef-1kg","Yona Beef 1kg","Frozen",80000],
+["nugget-so-ecco-500gr","Nugget So Ecco 500gr","Frozen",20000],
+["nugget-so-ecco-1kg","Nugget So Ecco 1kg","Frozen",40000],
+["nugget-richeese-500gr","Nugget Richeese 500gr","Frozen",30000],
+["nugget-kanzler-ori-450gr","Nugget Kanzler Ori 450gr","Frozen",45000],
+["nugget-kanzler-crispy-450gr","Nugget Kanzler Crispy 450gr","Frozen",45000],
+["sosis-vigo-bakar-500gr","Sosis Vigo Bakar 500gr","Frozen",30000],
+["sakana-siomay-frozen","Sakana Siomay","Frozen",30000],
+["roti-burger","Roti Burger","Frozen",18000]
+];
+
+
+function formatDateTime(value){
+  if(!value) return "Waktu belum tersedia";
+  let d;
+  if(typeof value?.toDate==="function") d=value.toDate();
+  else if(value instanceof Date) d=value;
+  else if(typeof value==="number") d=new Date(value);
+  else d=new Date(value);
+  if(isNaN(d.getTime())) return "Waktu belum tersedia";
+  return new Intl.DateTimeFormat("id-ID",{
+    day:"2-digit",month:"2-digit",year:"numeric",
+    hour:"2-digit",minute:"2-digit",second:"2-digit",
+    hour12:false
+  }).format(d);
+}
+
+
+function receiptDateTime(value){
+  if(!value) return "-";
+  let d;
+  if(typeof value?.toDate==="function") d=value.toDate();
+  else d=value instanceof Date ? value : new Date(value);
+  if(isNaN(d.getTime())) return "-";
+  return new Intl.DateTimeFormat("id-ID",{
+    day:"2-digit",month:"2-digit",year:"numeric",
+    hour:"2-digit",minute:"2-digit",second:"2-digit",
+    hour12:false
+  }).format(d);
+}
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function cleanterPrint(payload){
+  const urls=["http://localhost:9100/print","http://127.0.0.1:9100/print"];
+  let lastError=null;
+  for(const url of urls){
+    try{
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),5000);
+      const r=await fetch(url,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload),
+        cache:"no-store",
+        credentials:"omit",
+        signal:controller.signal
+      });
+      clearTimeout(timer);
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error("Cleanter HTTP "+r.status+(data?.error?": "+data.error:""));
+      if(data?.status && data.status !== "printed") throw new Error("Cleanter: "+data.status);
+      return data;
+    }catch(e){lastError=e;}
+  }
+  throw lastError||new Error("Cleanter tidak terhubung");
+}
+
+async function cleanterHealth(){
+  try{
+    const r=await fetch("http://localhost:9100/health",{cache:"no-store",signal:AbortSignal.timeout(1800)});
+    return r.ok;
+  }catch(e){return false;}
+}
+
+function cleanterOrderPayload(o){
+  const num=(o.orderNo||"").split("-").at(-1)||"?";
+  const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
+  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
+  const content=[
+    {type:"text",text:"KEDAI HAWA",align:"center",bold:true,size:"large"},
+    {type:"text",text:"LAMPIRAN ORDER",align:"center",bold:true},
+    {type:"divider"},
+    {type:"text",text:"ORDER #"+num,align:"center",bold:true,size:"large"},
+    {type:"text",text:receiptDateTime(o.createdAt),align:"center"},
+    {type:"divider"},
+    {type:"text",text:"PELANGGAN",bold:true},
+    {type:"text",text:String(o.customerName||"-")},
+    {type:"text",text:"HP : "+String(o.customerPhone||"-")},
+    {type:"divider"},
+    {type:"text",text:"DAFTAR PESANAN",bold:true}
+  ];
+  (o.items||[]).forEach(i=>{
+    const name=String(i.name||"")+(i.variant?" ("+i.variant+")":"");
+    const q=Number(i.qty)||0, p=Number(i.price)||0;
+    content.push({type:"row",left:name,right:"x"+q});
+    content.push({type:"row",left:"  "+rupiah(p)+" x "+q,right:rupiah(p*q)});
+  });
+  content.push({type:"divider"});
+  content.push({type:"row",left:"SUBTOTAL",right:rupiah(o.subtotal ?? o.total),bold:true});
+  if(Number(o.shippingFee)>0) content.push({type:"row",left:"ONGKIR",right:rupiah(o.shippingFee)});
+  content.push({type:"row",left:"TOTAL",right:rupiah(o.total),bold:true});
+  content.push({type:"divider"},{type:"text",text:"PENGIRIMAN: "+String(delivery),bold:true});
+  content.push({type:"text",text:"PEMBAYARAN: "+String(payment),bold:true});
+  content.push({type:"text",text:"ALAMAT: "+String(o.address||"-")});
+  if(o.deliveryNote) content.push({type:"text",text:"CATATAN ALAMAT: "+String(o.deliveryNote)});
+  if(o.orderNote) content.push({type:"text",text:"CATATAN PESANAN: "+String(o.orderNote)});
+  content.push({type:"divider"},{type:"text",text:"*** ORDER BARU ***",align:"center",bold:true},{type:"text",text:"Kedai Hawa",align:"center"},{type:"feed",lines:3});
+  return {cut:true,content};
+}
+
+function cleanterReceiptPayload(o){
+  const num=(o.orderNo||"").split("-").at(-1)||"?";
+  const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
+  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
+  const content=[
+    {type:"text",text:"KEDAI HAWA",align:"center",bold:true,size:"large"},
+    {type:"text",text:"STRUK PEMBAYARAN",align:"center",bold:true},
+    {type:"divider"},
+    {type:"text",text:"ORDER #"+num,align:"center",bold:true},
+    {type:"text",text:receiptDateTime(o.createdAt),align:"center"},
+    {type:"divider"},
+    {type:"text",text:"Pelanggan: "+String(o.customerName||"-")},
+    {type:"text",text:"Pengiriman: "+String(delivery)},
+    {type:"text",text:"Pembayaran: "+String(payment)},
+    {type:"divider"}
+  ];
+  (o.items||[]).forEach(i=>{
+    const name=String(i.name||"")+(i.variant?" ("+i.variant+")":"");
+    const q=Number(i.qty)||0,p=Number(i.price)||0;
+    content.push({type:"row",left:name+" x"+q,right:rupiah(q*p)});
+  });
+  content.push({type:"divider"},{type:"row",left:"Subtotal",right:rupiah(o.subtotal??o.total)});
+  if(Number(o.shippingFee)>0) content.push({type:"row",left:"Ongkir",right:rupiah(o.shippingFee)});
+  content.push({type:"row",left:"TOTAL",right:rupiah(o.total),bold:true},{type:"divider"},{type:"text",text:"Terima kasih",align:"center"},{type:"text",text:"Kedai Hawa",align:"center"},{type:"feed",lines:3});
+  return {cut:true,content};
+}
+
+function browserPrint(html,title){
+  const w=window.open("","_blank","width=420,height=800");
+  if(!w){alert("Cetak diblokir browser. Izinkan pop-up untuk situs Kedai Hawa.");return false;}
+  w.document.write(html.replace("__TITLE__",esc(title||"Kedai Hawa")));
+  w.document.close(); return true;
+}
+
+function browserOrderPrint(o){
+  const number=(o.orderNo||"").split("-").at(-1)||"?";
+  const items=(o.items||[]).map(i=>{const q=Number(i.qty)||0,p=Number(i.price)||0;return `<div style="padding:4px 0;border-bottom:1px dotted #777"><b>${esc(i.name||"")}${i.variant?` (${esc(i.variant)})`:""}</b><br>${q} x ${rupiah(p)} <b style="float:right">${rupiah(q*p)}</b></div>`;}).join("");
+  const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
+  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>__TITLE__</title><style>@page{size:58mm auto;margin:0}body{width:58mm;margin:0;padding:3mm 2.5mm;font:11px Arial;color:#000;box-sizing:border-box}.c{text-align:center}.t{font-size:18px;font-weight:900}.o{font-size:16px;font-weight:900}.d{border-top:1px dashed #000;margin:7px 0}.n{font-size:10px;white-space:pre-wrap}</style></head><body><div class="c t">KEDAI HAWA</div><div class="c"><b>LAMPIRAN ORDER</b></div><div class="d"></div><div class="c o">ORDER #${esc(number)}</div><div class="c">${esc(receiptDateTime(o.createdAt))}</div><div class="d"></div><b>PELANGGAN</b><br>${esc(o.customerName||"-")}<br>HP : ${esc(o.customerPhone||"-")}<div class="d"></div><b>DAFTAR PESANAN</b>${items}<div class="d"></div><b>PENGIRIMAN:</b> ${esc(delivery)}<div style="margin-top:4px"><b>PEMBAYARAN:</b> ${esc(payment)}</div><div style="margin-top:4px"><b>ALAMAT:</b><div class="n">${esc(o.address||"-")}</div></div>${o.deliveryNote?`<div style="margin-top:4px"><b>CATATAN ALAMAT:</b><div class="n">${esc(o.deliveryNote)}</div></div>`:""}${o.orderNote?`<div style="margin-top:4px"><b>CATATAN PESANAN:</b><div class="n">${esc(o.orderNote)}</div></div>`:""}<div class="d"></div><div class="c"><b>*** ORDER BARU ***</b><br>Kedai Hawa</div><script>window.onload=()=>setTimeout(()=>window.print(),250);window.onafterprint=()=>setTimeout(()=>window.close(),300);<\/script></body></html>`;
+  return browserPrint(html,"Lampiran Order #"+number);
+}
+
+async function printOrder(o){
+  try{
+    await cleanterPrint(cleanterOrderPayload(o));
+    return true;
+  }catch(e){
+    console.error("AUTO PRINT CLEANter GAGAL",e);
+    return false;
+  }
+}
+
+async function autoPrintNewOrder(o){
+  const key="kedaiHawaPrintedOrders";
+  let printed=[];
+  try{printed=JSON.parse(localStorage.getItem(key)||"[]");}catch(e){}
+  if(printed.includes(o.id)) return;
+
+  // Coba beberapa kali supaya koneksi Cleanter yang baru aktif tetap tertangkap.
+  for(let attempt=1; attempt<=4; attempt++){
+    const ok=await printOrder(o);
+    if(ok){
+      printed.push(o.id);
+      localStorage.setItem(key,JSON.stringify(printed.slice(-200)));
+      const s=$("printerStatus");
+      if(s){s.textContent="🟢 Lampiran order otomatis tercetak";s.className="notice success";}
+      return;
+    }
+    await new Promise(r=>setTimeout(r,1500));
+  }
+  const s=$("printerStatus");
+  if(s){s.textContent="🔴 Cleanter tidak merespons. Pastikan HTTP Server Running.";s.className="notice error";}
+}
+
+async function printReceipt(o){
+  try{await cleanterPrint(cleanterReceiptPayload(o));return true;}
+  catch(e){
+    const number=(o.orderNo||"").split("-").at(-1)||"?";
+    const items=(o.items||[]).map(i=>`<div style="padding:4px 0;border-bottom:1px dotted #777"><b>${esc(i.name||"")}${i.variant?` (${esc(i.variant)})`:""}</b><div style="display:flex;justify-content:space-between">${Number(i.qty)||0} x ${rupiah(i.price)} <b>${rupiah((Number(i.qty)||0)*(Number(i.price)||0))}</b></div></div>`).join("");
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>__TITLE__</title><style>@page{size:58mm auto;margin:0}body{width:58mm;margin:0;padding:3mm 2.5mm;font:11px Arial;color:#000;box-sizing:border-box}.c{text-align:center}.t{font-size:18px;font-weight:900}.d{border-top:1px dashed #000;margin:7px 0}.tot{font-size:15px;font-weight:900;display:flex;justify-content:space-between}</style></head><body><div class="c t">KEDAI HAWA</div><div class="c"><b>STRUK PEMBAYARAN</b></div><div class="d"></div><div class="c"><b>ORDER #${esc(number)}</b><br>${esc(receiptDateTime(o.createdAt))}</div><div class="d"></div><b>Pelanggan:</b> ${esc(o.customerName||"-")}<br><b>Pembayaran:</b> ${esc(o.paymentMethod||"-")}<div class="d"></div>${items}<div class="d"></div><div>Subtotal <b style="float:right">${rupiah(o.subtotal??o.total)}</b></div>${Number(o.shippingFee)>0?`<div>Ongkir <b style="float:right">${rupiah(o.shippingFee)}</b></div>`:""}<div class="tot"><span>TOTAL</span><span>${rupiah(o.total)}</span></div><div class="d"></div><div class="c">Terima kasih<br>Kedai Hawa</div><script>window.onload=()=>setTimeout(()=>window.print(),250);window.onafterprint=()=>setTimeout(()=>window.close(),300);<\/script></body></html>`;
+    return browserPrint(html,"Struk Order #"+number);
+  }
+}
+
+function showOrderNotification(o){
+  const text=`ORDER #${(o.orderNo||"").split("-").at(-1)||"?"} • ${o.customerName||"Pelanggan"} • ${rupiah(o.total)}`;
+  const box=$("orderAlert");
+  if(!box)return;
+  $("orderAlertText").innerHTML=`<b>${text}</b><br><span>Masuk: ${formatDateTime(o.createdAt)}</span>`;
+  box.classList.remove("hidden");
+  clearTimeout(notificationTimer);
+  notificationTimer=setTimeout(()=>box.classList.add("hidden"),15000);
+
+  // Get attention even if the owner is looking at another part of the page.
+  if(navigator.vibrate) navigator.vibrate([250,120,250]);
+
+  // Short notification sound.
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(Ctx){
+      const ctx=new Ctx();
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+      osc.type="sine"; osc.frequency.value=880;
+      gain.gain.setValueAtTime(0.0001,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18,ctx.currentTime+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.45);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime+0.5);
+    }
+  }catch(e){}
+
+  // Browser notification, if the owner has enabled it.
+  if("Notification" in window && Notification.permission==="granted"){
+    try{
+      new Notification("🔔 Kedai Hawa — Pesanan Baru",{
+        body:`ORDER #${(o.orderNo||"").split("-").at(-1)||"?"} dari ${o.customerName||"Pelanggan"} — ${rupiah(o.total)}`,
+        tag:"kedai-hawa-order-"+o.id
+      });
+    }catch(e){}
+  }
+
+  // PRINT OTOMATIS: kirim langsung ke Cleanter/RPP02N.
+  // ID order baru hanya ditandai tercetak setelah Cleanter mengembalikan HTTP OK.
+  setTimeout(()=>autoPrintNewOrder(o),700);
+}
+
+async function enableNotifications(){
+  const btn=$("notifyBtn");
+  if(!("Notification" in window)){
+    alert("Browser ini tidak mendukung notifikasi.");
+    return;
+  }
+  if(!currentUser || currentUser.isAnonymous){
+    alert("Silakan login Owner terlebih dahulu.");
+    return;
+  }
+  try{
+    btn.disabled=true;
+    btn.textContent="⏳ Menyiapkan Notifikasi...";
+    const token=await enableOwnerPush(currentUser);
+    btn.textContent="🔔 Notifikasi Aktif";
+    btn.classList.add("status-ok");
+    alert("Notifikasi Owner berhasil diaktifkan.");
+    console.log("Kedai Hawa FCM token:", token);
+  }catch(e){
+    console.error("FCM setup error:",e);
+    btn.textContent="🔔 Aktifkan Notifikasi";
+    alert("Notifikasi gagal diaktifkan:\n"+(e?.message||e));
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+
+function histDate(o){if(!o?.createdAt)return null;const d=typeof o.createdAt?.toDate==="function"?o.createdAt.toDate():new Date(o.createdAt);return isNaN(d)?null:d;}
+function histList(){const f=$("historyFrom").value,t=$("historyTo").value,st=$("historyStatus").value;return orders.filter(o=>{const d=histDate(o);if(!d)return false;const day=d.toISOString().slice(0,10);return (!f||day>=f)&&(!t||day<=t)&&(!st||o.status===st);});}
+function renderHistory(){const list=histList(),omzet=list.filter(o=>o.status!=="cancelled").reduce((a,o)=>a+(Number(o.total)||0),0);$("historySummary").innerHTML=`<b>${list.length}</b> pesanan • Total transaksi: <b>${rupiah(omzet)}</b>`;$("historyOmzet").textContent=rupiah(omzet);$("historyRows").innerHTML=list.map(o=>{const d=histDate(o);const dt=d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"-";return `<tr><td>#${(o.orderNo||"").split("-").at(-1)||"?"}</td><td>${dt}</td><td>${o.customerName||"-"}</td><td>${o.deliveryMethod||"-"}</td><td>${rupiah(o.total)}</td><td>${label(o.status)}</td></tr>`}).join("")||`<tr><td colspan="6">Belum ada history.</td></tr>`;}
+function downloadHistory(){const list=histList(),rows=[["Order","Tanggal & Jam","Pelanggan","No HP","Pengiriman","Pembayaran","Subtotal","Ongkir","Total","Status","Catatan"]];list.forEach(o=>{const d=histDate(o);rows.push([o.orderNo,d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"",o.customerName,o.customerPhone,o.deliveryMethod,o.paymentMethod,o.subtotal,o.shippingFee,o.total,label(o.status),o.orderNote||""]);});const csv="\uFEFF"+rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\r\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=`history-omzet-kedai-hawa-${new Date().toISOString().slice(0,10)}.csv`;a.click();}
+function printHistory(){const list=histList(),omzet=list.filter(o=>o.status!=="cancelled").reduce((a,o)=>a+(Number(o.total)||0),0),rows=list.map(o=>{const d=histDate(o);return `<tr><td>#${(o.orderNo||"").split("-").at(-1)||"?"}</td><td>${d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"-"}</td><td>${o.customerName||"-"}</td><td>${o.deliveryMethod||"-"}</td><td>${rupiah(o.total)}</td><td>${label(o.status)}</td></tr>`}).join("");const w=open("","_blank");if(!w){alert("Izinkan pop-up untuk mencetak.");return;}w.document.write(`<html><head><title>History Kedai Hawa</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:7px}th{background:#eee}</style></head><body><h1>KEDAI HAWA</h1><h2>History Pesanan</h2><table><tr><th>Order</th><th>Tanggal & Jam</th><th>Pelanggan</th><th>Pengiriman</th><th>Total</th><th>Status</th></tr>${rows}</table><h3>Jumlah Order: ${list.length}</h3><h3>Omzet: ${rupiah(omzet)}</h3><script>onload=()=>print()<\/script></body></html>`);w.document.close();}
+$("historyFrom").onchange=renderHistory;$("historyTo").onchange=renderHistory;$("historyStatus").onchange=renderHistory;$("downloadHistoryBtn").onclick=downloadHistory;$("printHistoryBtn").onclick=printHistory;
+
+function isAndroidWebView(){
+  const ua = navigator.userAgent || "";
+  return /\bwv\b/i.test(ua) ||
+         /; wv\)/i.test(ua) ||
+         (/Version\/4\.0/i.test(ua) && /Chrome\//i.test(ua) && /Mobile/i.test(ua));
+}
+
+function init(){
+ onAuthStateChanged(auth,user=>{currentUser=user;
+    listenStoreStatus();if(user&&!user.isAnonymous){
+  $("loginBox").classList.add("hidden");
+  $("dashboard").classList.remove("hidden");
+  $("logoutBtn").classList.remove("hidden");
+  if(isAndroidWebView()){
+    $("notifyBtn").classList.add("hidden");
+  }else{
+    $("notifyBtn").classList.remove("hidden");
+    if("Notification" in window && Notification.permission==="granted"){
+      $("notifyBtn").textContent="🔔 Notifikasi Aktif";
+    }
+  }
+  listen();
+  updatePrinterStatus();
+  setInterval(updatePrinterStatus,10000);
+}else{
+  $("loginBox").classList.remove("hidden");
+  $("dashboard").classList.add("hidden");
+  $("logoutBtn").classList.add("hidden");
+  $("notifyBtn").classList.add("hidden");
+}});
+}
+
+// FCM foreground message handler. Background messages are handled by firebase-messaging-sw.js.
+try{
+  listenForegroundPush((payload)=>{
+    const n=payload?.notification||{};
+    if(n.title||n.body){
+      if("Notification" in window && Notification.permission==="granted"){
+        new Notification(n.title||"Kedai Hawa",{body:n.body||"Order baru masuk."});
+      }
+    }
+  });
+}catch(e){ console.warn("FCM foreground listener unavailable:",e); }
+
+$("notifyBtn").onclick=enableNotifications;
+$("closeOrderAlert").onclick=()=>$("orderAlert").classList.add("hidden");
+$("goToOrdersBtn").onclick=()=>{ $("orderAlert").classList.add("hidden"); document.querySelector("[data-page=\"orders\"]")?.click(); };
+$("loginBtn").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value,$("password").value);$("loginMsg").classList.add("hidden")}catch(e){$("loginMsg").textContent="Login gagal: "+e.message;$("loginMsg").classList.remove("hidden")}};
+$("logoutBtn").onclick=()=>signOut(auth);
+document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-page]").forEach(x=>x.classList.remove("active"));b.classList.add("active");$("ordersPage").classList.toggle("hidden",b.dataset.page!=="orders");$("historyPage").classList.toggle("hidden",b.dataset.page!=="history");$("menuPage").classList.toggle("hidden",b.dataset.page!=="menu");if(b.dataset.page==="history")renderHistory();});
+
+async function updatePrinterStatus(){
+  const s=$("printerStatus");
+  if(!s) return;
+  if(await cleanterHealth()){s.textContent="🟢 Cleanter siap — RPP02N terhubung";s.className="notice success";}
+  else{s.textContent="🟡 Cleanter belum terdeteksi. Pastikan HTTP Server Running.";s.className="notice";}
+}
+
+function listen(){
+ onSnapshot(query(collection(db,"menu"),orderBy("sort","asc")),snap=>{
+   menu=snap.docs.map(d=>({id:d.id,...d.data()}));
+   renderMenu();
+ });
+ onSnapshot(query(collection(db,"orders"),orderBy("createdAt","desc")),snap=>{
+   if(ordersInitialized){
+     snap.docChanges().forEach(change=>{
+       if(change.type==="added"){
+         const o={id:change.doc.id,...change.doc.data()};
+         if(o.status!=="cancelled") showOrderNotification(o);
+       }
+     });
+   }
+   orders=snap.docs.map(d=>({id:d.id,...d.data()}));
+   ordersInitialized=true;
+   renderOrders(); if(!$("historyPage").classList.contains("hidden"))renderHistory();
+ });
+}
+function renderMenu(){
+ $("menuRows").innerHTML=menu.map(x=>`<tr><td><b>${x.name}</b></td><td>${x.category||"-"}</td><td>${x.variants?.length?x.variants.map(v=>`${v.name}: ${rupiah(v.price)}`).join("<br>"):rupiah(x.price)}</td><td>${x.stock??"Belum diatur"}</td><td>${x.active===false?"🔴 Nonaktif":"🟢 Aktif"}</td><td style="white-space:nowrap"><button class="btn secondary" data-edit="${x.id}">✏️ Edit</button> <button class="btn ghost" data-delete-menu="${x.id}">🗑️ Hapus</button></td></tr>`).join("");
+ document.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openEdit(b.dataset.edit));
+ document.querySelectorAll("[data-delete-menu]").forEach(b=>b.onclick=async()=>{
+   const id=b.dataset.deleteMenu, x=menu.find(m=>m.id===id); if(!x)return;
+   if(!confirm(`Hapus menu "${x.name||""}" dari daftar menu?`)) return;
+   try{ await deleteDoc(doc(db,"menu",id)); }
+   catch(e){ alert("Gagal menghapus menu: "+e.message); }
+ });
+}
+function renderOrders(){
+ const pending=orders.filter(o=>o.status==="pending").length; $("newCount").textContent=pending;$("todayCount").textContent=orders.length;
+ const done=orders.filter(o=>o.status==="received"||o.status==="completed").reduce((s,o)=>s+(o.total||0),0);$("todaySales").textContent=rupiah(done);
+ $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
+ document.querySelectorAll("[data-status]").forEach(s=>s.onchange=async()=>updateDoc(doc(db,"orders",s.dataset.status),{status:s.value,statusUpdatedAt:serverTimestamp()}));
+ document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) printOrder(o);});
+ document.querySelectorAll("[data-print-receipt]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printReceipt);if(o) printReceipt(o);});
+}
+function label(s){return({pending:"Menunggu Konfirmasi",confirmed:"Dikonfirmasi",processing:"Sedang Diproses",ready:"Siap / Diantar",delivered:"Diserahkan ke Pelanggan",received:"Diterima Pelanggan",cancelled:"Dibatalkan"})[s]||s}
+
+async function seedMenu(){
+ for(let i=0;i<seed.length;i++){const [id,name,category,price,variants]=seed[i];await setDoc(doc(db,"menu",id),{name,category,price:price??null,variants:variants||null,stock:null,active:true,description:"",sort:i+1,updatedAt:serverTimestamp()},{merge:true});}
+ alert("Data menu awal Kedai Hawa berhasil dimasukkan.");
+}
+$("seedBtn").onclick=async()=>{if(confirm("Masukkan data menu awal ke Firestore? Data dengan ID sama akan diperbarui."))await seedMenu()};
+
+function parseVariants(text){
+ const lines=String(text||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const out=[];
+ for(const line of lines){
+   const parts=line.split("|");
+   const name=(parts[0]||"").trim();
+   const price=Number(String(parts[1]||"").replace(/[^0-9.-]/g,""));
+   if(name && Number.isFinite(price)) out.push({name,price});
+ }
+ return out;
+}
+
+function openEdit(id){
+ const x=menu.find(m=>m.id===id);if(!x)return;
+ $("editId").value=id;$("editMode").value="edit";
+ $("editName").value=x.name||"";$("editCategory").value=x.category||"";$("editPrice").value=x.price??"";
+ $("editStock").value=x.stock??"";$("editActive").value=x.active===false?"false":"true";$("editDesc").value=x.description||"";
+ $("editVariants").value=(x.variants||[]).map(v=>`${v.name}|${v.price}`).join("\n");
+ $("editSort").value=x.sort??"";
+ $("editTitle").textContent="Edit Menu";$("saveMenuBtn").textContent="Simpan Perubahan";
+ $("editMsg").classList.add("hidden");$("editModal").classList.add("show");
+}
+
+function openNewMenu(){
+ $("editId").value="";$("editMode").value="new";
+ ["editName","editCategory","editPrice","editStock","editDesc","editVariants","editSort"].forEach(id=>$(id).value="");
+ $("editActive").value="true";$("editTitle").textContent="Tambah Menu";$("saveMenuBtn").textContent="Tambah Menu";
+ $("editMsg").classList.add("hidden");$("editModal").classList.add("show");
+}
+
+document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest(".modal").classList.remove("show"));
+$("newMenuBtn").onclick=openNewMenu;
+$("saveMenuBtn").onclick=async()=>{
+ const id=$("editId").value.trim();
+ const isNew=$("editMode").value==="new";
+ const name=$("editName").value.trim();
+ if(!name){$("editMsg").textContent="Nama menu wajib diisi.";$("editMsg").className="notice error";$("editMsg").classList.remove("hidden");return;}
+ const stockVal=$("editStock").value;
+ const variants=parseVariants($("editVariants").value);
+ const price=Number($("editPrice").value)||0;
+ const sortVal=$("editSort").value;
+ try{
+   const data={
+     name,
+     category:$("editCategory").value.trim(),
+     price,
+     variants:variants.length?variants:null,
+     stock:stockVal===""?null:Number(stockVal),
+     active:$("editActive").value==="true",
+     description:$("editDesc").value.trim(),
+     sort:sortVal===""?(isNew?(Math.max(0,...menu.map(m=>Number(m.sort)||0))+1):999):Number(sortVal),
+     updatedAt:serverTimestamp()
+   };
+   if(isNew){
+     const newId=(name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"menu")+"-"+Date.now().toString(36);
+     await setDoc(doc(db,"menu",newId),data);
+   }else{
+     await updateDoc(doc(db,"menu",id),data);
+   }
+   $("editModal").classList.remove("show");
+ }catch(e){$("editMsg").textContent="Gagal menyimpan: "+e.message;$("editMsg").className="notice error";$("editMsg").classList.remove("hidden");}
+};
+
+init();
+
+</script>
 </body></html>
