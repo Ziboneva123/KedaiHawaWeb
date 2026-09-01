@@ -10,41 +10,44 @@
   <div style="margin-top:5px;font-size:14px">Pesanan sementara tidak dapat dibuat. Silakan kembali lagi nanti.</div>
 </div>
 
-<section class="card" style="margin-top:14px;border:2px solid #17663b;background:#fafcf9">
-  <h2 style="margin:0 0 10px">📋 Catatan Sistem Order Online Kedai Hawa</h2>
-
-  <div style="line-height:1.65;font-size:14px">
-    <div style="margin-bottom:10px">
-      <b>1. Via Antar Langsung</b><br>
-      Hanya mencakup wilayah <b>Pasirlimus, Delta 1</b>.<br>
-      Selain itu bisa hubungi Admin untuk konfirmasi alamat:
-      <a href="https://wa.me/6285886961338" target="_blank" rel="noopener"
-         style="font-weight:900;color:#17663b;text-decoration:none">
-        WA Eva: 0858-8696-1338
-      </a>
-    </div>
-
-    <div style="margin-bottom:10px">
-      <b>2. Sistem Order via Ojek Online</b><br>
-      Hanya ada pilihan <b>Lalamove</b>, sistem order sendiri dengan titik yang sudah diberikan di sistem order.
-    </div>
-
-    <div style="margin-bottom:10px">
-      Ada pertanyaan lebih lanjut hub. Admin kami:<br>
-      <a href="https://wa.me/6285886961338" target="_blank" rel="noopener"
-         style="font-weight:900;color:#17663b;text-decoration:none">
-        WA Eva: 0858-8696-1338
-      </a>
-    </div>
-
-    <div style="font-weight:800">
-      Terimakasih Telah Berbelanja di Kedai Hawa.<br>
-      Happy shopping 😁
+<section class="card" style="margin-top:14px;border:2px solid #17663b;background:#fafcf9;padding:0;overflow:hidden">
+  <button id="systemNoteToggle" type="button"
+    style="width:100%;border:0;background:transparent;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;font-size:16px;font-weight:900;color:#17663b;cursor:pointer">
+    <span>📋 Catatan Sistem Order Online Kedai Hawa</span>
+    <span id="systemNoteIcon" style="font-size:18px">▼</span>
+  </button>
+  <div id="systemNoteContent" style="display:none;padding:0 16px 16px">
+    <div style="line-height:1.65;font-size:14px">
+      <div style="margin-bottom:10px"><b>1. Via Antar Langsung</b><br>
+        Hanya mencakup wilayah <b>Pasirlimus, Delta 1</b>.<br>
+        Selain itu bisa hubungi Admin untuk konfirmasi alamat:
+        <a href="https://wa.me/6285886961338" target="_blank" rel="noopener" style="font-weight:900;color:#17663b;text-decoration:none">WA Eva: 0858-8696-1338</a>
+      </div>
+      <div style="margin-bottom:10px"><b>2. Sistem Order via Ojek Online</b><br>
+        Hanya ada pilihan <b>Lalamove</b>, sistem order sendiri dengan titik yang sudah diberikan di sistem order.
+      </div>
+      <div style="margin-bottom:10px">Ada pertanyaan lebih lanjut hub. Admin kami:<br>
+        <a href="https://wa.me/6285886961338" target="_blank" rel="noopener" style="font-weight:900;color:#17663b;text-decoration:none">WA Eva: 0858-8696-1338</a>
+      </div>
+      <div style="font-weight:800">Terimakasih Telah Berbelanja di Kedai Hawa.<br>Happy shopping 😁</div>
     </div>
   </div>
 </section>
-
-  <div class="card"><input id="search" placeholder="🔎 Cari makanan atau minuman..."><div id="tabs" class="tabs"></div></div>
+<script>
+(() => {
+  const btn=document.getElementById("systemNoteToggle");
+  const content=document.getElementById("systemNoteContent");
+  const icon=document.getElementById("systemNoteIcon");
+  if(btn && content){
+    btn.addEventListener("click",()=>{
+      const open=content.style.display!=="none";
+      content.style.display=open?"none":"block";
+      if(icon) icon.textContent=open?"▼":"▲";
+    });
+  }
+})();
+</script>
+<div class="card"><input id="search" placeholder="🔎 Cari makanan atau minuman..."><div id="tabs" class="tabs"></div></div>
   <div id="notice" class="notice hidden" style="margin-top:14px"></div>
   <section class="card" style="margin-top:14px">
     <div class="row"><h2 style="margin:0">📦 Status Pesanan</h2><span class="order-status status-ok">● REALTIME</span></div>
