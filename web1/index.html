@@ -29,7 +29,7 @@
 </section>
 </main>
 
-<div id="printerStatus" class="notice">🟡 Menunggu order baru — Cleanter/RPP02N</div>
+<div id="printerStatus" class="notice">🟡 Menunggu order baru — ESP32/RPP02N</div>
 <div id="orderAlert" class="card hidden" style="
 position:fixed;left:14px;right:14px;top:14px;z-index:9999;
 background:#ffffff;border:2px solid #17663b;box-shadow:0 10px 30px rgba(0,0,0,.20);
@@ -43,17 +43,7 @@ padding:14px;">
   </div>
   <button id="goToOrdersBtn" class="btn primary" style="width:100%;margin-top:10px">📋 Lihat Pesanan</button>
 </div>
-<div id="editModal" class="modal"><div class="sheet"><div class="row"><h2 id="editTitle">Edit Menu</h2><button class="btn ghost" data-close>✕</button></div><input type="hidden" id="editId"><input type="hidden" id="editMode" value="edit"><label>Nama Menu</label><input id="editName" placeholder="Contoh: Mie Tul"><label>Kategori</label><input id="editCategory" placeholder="Makanan / Minuman / Frozen"><label>Harga</label><input id="editPrice" type="number" inputmode="numeric" min="0" placeholder="12000"><label>Varian (opsional)</label><textarea id="editVariants" rows="3" placeholder="Varian 1|6000&#10;Varian 2|10000"></textarea><div class="muted" style="font-size:12px;margin-top:4px">Satu varian per baris dengan format: Nama Varian|Harga</div><label>Stok (kosong = belum diatur)</label><input id="editStock" type="number" min="0"><label>Urutan Tampil</label><input id="editSort" type="number" min="1"><label>Status</label><select id="editActive"><option value="true">Tersedia</option><option value="false">Nonaktif</option></select><label>Deskripsi</label><textarea id="editDesc" rows="2" placeholder="Deskripsi singkat menu"></textarea>
-<label>Gambar Menu</label>
-<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-  <input id="editImageFile" type="file" accept="image/*" style="flex:1;min-width:220px">
-  <button id="removeImageBtn" type="button" class="btn ghost">🗑️ Hapus Gambar</button>
-</div>
-<div class="muted" style="font-size:12px;margin-top:4px">Pilih foto dari HP. Gambar akan dikompres otomatis agar ringan dan disimpan bersama data menu.</div>
-<div id="editImagePreviewWrap" class="hidden" style="margin-top:10px;text-align:center">
-  <img id="editImagePreview" alt="Preview gambar menu" style="max-width:180px;max-height:180px;border-radius:12px;object-fit:cover;border:1px solid #d0d5dd">
-</div>
-<button id="saveMenuBtn" class="btn primary" style="width:100%;margin-top:12px">Simpan Perubahan</button><div id="editMsg" class="notice hidden" style="margin-top:10px"></div></div></div>
+<div id="editModal" class="modal"><div class="sheet"><div class="row"><h2 id="editTitle">Edit Menu</h2><button class="btn ghost" data-close>✕</button></div><input type="hidden" id="editId"><input type="hidden" id="editMode" value="edit"><label>Nama Menu</label><input id="editName" placeholder="Contoh: Mie Tul"><label>Kategori</label><input id="editCategory" placeholder="Makanan / Minuman / Frozen"><label>Harga</label><input id="editPrice" type="number" inputmode="numeric" min="0" placeholder="12000"><label>Varian (opsional)</label><textarea id="editVariants" rows="3" placeholder="Varian 1|6000&#10;Varian 2|10000"></textarea><div class="muted" style="font-size:12px;margin-top:4px">Satu varian per baris dengan format: Nama Varian|Harga</div><label>Stok (kosong = belum diatur)</label><input id="editStock" type="number" min="0"><label>Urutan Tampil</label><input id="editSort" type="number" min="1"><label>Status</label><select id="editActive"><option value="true">Tersedia</option><option value="false">Nonaktif</option></select><label>Deskripsi</label><textarea id="editDesc" rows="2" placeholder="Deskripsi singkat menu"></textarea><button id="saveMenuBtn" class="btn primary" style="width:100%;margin-top:12px">Simpan Perubahan</button><div id="editMsg" class="notice hidden" style="margin-top:10px"></div></div></div>
 <script type="module">window.addEventListener("error",e=>console.error("Kedai Hawa error:",e.error||e.message));</script><script type="module">
 import {
   db, auth, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy,
@@ -66,7 +56,6 @@ const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",m
 let currentUser=null, menu=[], orders=[];
 let storeOpen=true;
 let ordersInitialized=false;
-let editImageData="";
 
 function renderStoreStatus(){
   const text=$("storeStatusText");
@@ -224,36 +213,51 @@ function esc(v){
   return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
+// ============================================================
+// PRINTER TARGET — ESP32
+// Web1 -> WiFi -> ESP32 -> Bluetooth SPP -> RPP02N
+// ============================================================
+const ESP32_PRINTER_URL = "http://192.168.1.16";
+
 async function cleanterPrint(payload){
-  const urls=["http://localhost:9100/print","http://127.0.0.1:9100/print"];
-  let lastError=null;
-  for(const url of urls){
-    try{
-      const controller=new AbortController();
-      const timer=setTimeout(()=>controller.abort(),5000);
-      const r=await fetch(url,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(payload),
-        cache:"no-store",
-        credentials:"omit",
-        signal:controller.signal
-      });
-      clearTimeout(timer);
-      const data=await r.json().catch(()=>({}));
-      if(!r.ok) throw new Error("Cleanter HTTP "+r.status+(data?.error?": "+data.error:""));
-      if(data?.status && data.status !== "printed") throw new Error("Cleanter: "+data.status);
-      return data;
-    }catch(e){lastError=e;}
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),5000);
+  try{
+    console.log("[ESP32] Mengirim print ke",ESP32_PRINTER_URL);
+    const r=await fetch(ESP32_PRINTER_URL+"/print",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload),
+      cache:"no-store",
+      credentials:"omit",
+      signal:controller.signal
+    });
+    const data=await r.json().catch(()=>({}));
+    console.log("[ESP32] HTTP",r.status,data);
+    if(!r.ok) throw new Error("ESP32 HTTP "+r.status+(data?.error?": "+data.error:""));
+    if(data?.status && data.status!=="printed") throw new Error("ESP32: "+data.status);
+    return data;
+  }catch(e){
+    console.error("[ESP32] PRINT GAGAL:",e);
+    throw e;
+  }finally{
+    clearTimeout(timer);
   }
-  throw lastError||new Error("Cleanter tidak terhubung");
 }
 
 async function cleanterHealth(){
   try{
-    const r=await fetch("http://localhost:9100/health",{cache:"no-store",signal:AbortSignal.timeout(1800)});
+    const r=await fetch(ESP32_PRINTER_URL+"/health",{
+      cache:"no-store",
+      signal:AbortSignal.timeout(1800)
+    });
+    const data=await r.json().catch(()=>({}));
+    console.log("[ESP32] HEALTH:",data);
     return r.ok;
-  }catch(e){return false;}
+  }catch(e){
+    console.error("[ESP32] HEALTH GAGAL:",e);
+    return false;
+  }
 }
 
 function cleanterOrderPayload(o){
@@ -335,67 +339,6 @@ function browserOrderPrint(o){
   return browserPrint(html,"Lampiran Order #"+number);
 }
 
-function showLampiranMenu(o){
-  const old=document.getElementById("lampiranChoiceModal");
-  if(old)old.remove();
-
-  const number=(o.orderNo||"").split("-").at(-1)||"?";
-  const wrap=document.createElement("div");
-  wrap.id="lampiranChoiceModal";
-  wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.58);display:flex;align-items:center;justify-content:center;z-index:100000;padding:18px;box-sizing:border-box;touch-action:auto";
-
-  wrap.innerHTML=`<div style="width:min(390px,100%);background:#fff;border-radius:18px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.35);box-sizing:border-box">
-    <div style="font-size:20px;font-weight:900;text-align:center">📎 LAMPIRAN ORDER</div>
-    <div style="text-align:center;color:#667085;margin:7px 0 18px">ORDER #${esc(number)}</div>
-
-    <button type="button" id="lampiranPreviewBtn" class="btn secondary"
-      style="display:block;width:100%;min-height:48px;padding:13px;border-radius:11px;font-weight:900;font-size:16px;cursor:pointer;touch-action:manipulation">
-      👁 Preview
-    </button>
-
-    <button type="button" id="lampiranPrintBtn" class="btn primary"
-      style="display:block;width:100%;min-height:48px;padding:13px;border-radius:11px;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px;touch-action:manipulation">
-      🖨 Print
-    </button>
-
-    <button type="button" id="lampiranCancelBtn"
-      style="display:block;width:100%;min-height:44px;padding:11px;border:0;background:transparent;color:#667085;font-weight:800;font-size:15px;cursor:pointer;margin-top:6px;touch-action:manipulation">
-      Batal
-    </button>
-  </div>`;
-
-  document.body.appendChild(wrap);
-
-  const close=()=>{if(wrap.parentNode)wrap.remove();};
-
-  document.getElementById("lampiranCancelBtn").onclick=close;
-
-  document.getElementById("lampiranPreviewBtn").onclick=()=>{
-    close();
-    browserOrderPrint(o);
-  };
-
-  document.getElementById("lampiranPrintBtn").onclick=async()=>{
-    const btn=document.getElementById("lampiranPrintBtn");
-    if(!btn)return;
-    btn.disabled=true;
-    btn.textContent="⏳ Mencetak...";
-
-    try{
-      await cleanterPrint(cleanterOrderPayload(o));
-      close();
-    }catch(e){
-      console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
-      close();
-      browserOrderPrint(o);
-    }
-  };
-
-  wrap.onclick=e=>{
-    if(e.target===wrap)close();
-  };
-}
-
 async function printOrder(o){
   try{
     await cleanterPrint(cleanterOrderPayload(o));
@@ -425,7 +368,7 @@ async function autoPrintNewOrder(o){
     await new Promise(r=>setTimeout(r,1500));
   }
   const s=$("printerStatus");
-  if(s){s.textContent="🔴 Cleanter tidak merespons. Pastikan HTTP Server Running.";s.className="notice error";}
+  if(s){s.textContent="🔴 ESP32 tidak merespons. Pastikan ESP32 aktif di 192.168.1.16.";s.className="notice error";}
 }
 
 async function printReceipt(o){
@@ -570,8 +513,8 @@ document.querySelectorAll("[data-page]").forEach(b=>b.onclick=()=>{document.quer
 async function updatePrinterStatus(){
   const s=$("printerStatus");
   if(!s) return;
-  if(await cleanterHealth()){s.textContent="🟢 Cleanter siap — RPP02N terhubung";s.className="notice success";}
-  else{s.textContent="🟡 Cleanter belum terdeteksi. Pastikan HTTP Server Running.";s.className="notice";}
+  if(await cleanterHealth()){s.textContent="🟢 ESP32 siap — RPP02N terhubung";s.className="notice success";}
+  else{s.textContent="🟡 ESP32 belum terdeteksi — 192.168.1.16";s.className="notice";}
 }
 
 function listen(){
@@ -606,13 +549,9 @@ function renderMenu(){
 function renderOrders(){
  const pending=orders.filter(o=>o.status==="pending").length; $("newCount").textContent=pending;$("todayCount").textContent=orders.length;
  const done=orders.filter(o=>o.status==="received"||o.status==="completed").reduce((s,o)=>s+(o.total||0),0);$("todaySales").textContent=rupiah(done);
- $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button type="button" class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
+ $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
  document.querySelectorAll("[data-status]").forEach(s=>s.onchange=async()=>updateDoc(doc(db,"orders",s.dataset.status),{status:s.value,statusUpdatedAt:serverTimestamp()}));
- document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{
-  const o=orders.find(x=>x.id===b.dataset.printOrder);
-  if(!o)return;
-  showLampiranMenu(o);
-});
+ document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) printOrder(o);});
  document.querySelectorAll("[data-print-receipt]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printReceipt);if(o) printReceipt(o);});
 }
 function label(s){return({pending:"Menunggu Konfirmasi",confirmed:"Dikonfirmasi",processing:"Sedang Diproses",ready:"Siap / Diantar",delivered:"Diserahkan ke Pelanggan",received:"Diterima Pelanggan",cancelled:"Dibatalkan"})[s]||s}
@@ -640,10 +579,6 @@ function openEdit(id){
  $("editId").value=id;$("editMode").value="edit";
  $("editName").value=x.name||"";$("editCategory").value=x.category||"";$("editPrice").value=x.price??"";
  $("editStock").value=x.stock??"";$("editActive").value=x.active===false?"false":"true";$("editDesc").value=x.description||"";
- editImageData=x.imageData||"";
- $("editImageFile").value="";
- $("editImagePreview").src=editImageData||"";
- $("editImagePreviewWrap").classList.toggle("hidden",!editImageData);
  $("editVariants").value=(x.variants||[]).map(v=>`${v.name}|${v.price}`).join("\n");
  $("editSort").value=x.sort??"";
  $("editTitle").textContent="Edit Menu";$("saveMenuBtn").textContent="Simpan Perubahan";
@@ -653,59 +588,9 @@ function openEdit(id){
 function openNewMenu(){
  $("editId").value="";$("editMode").value="new";
  ["editName","editCategory","editPrice","editStock","editDesc","editVariants","editSort"].forEach(id=>$(id).value="");
- $("editImageFile").value="";
- editImageData="";
- $("editImagePreview").src="";
- $("editImagePreviewWrap").classList.add("hidden");
  $("editActive").value="true";$("editTitle").textContent="Tambah Menu";$("saveMenuBtn").textContent="Tambah Menu";
  $("editMsg").classList.add("hidden");$("editModal").classList.add("show");
 }
-
-async function compressMenuImage(file){
-  if(!file)return "";
-  if(!file.type.startsWith("image/"))throw new Error("File harus berupa gambar.");
-  const maxSide=800, quality=0.72;
-  const url=URL.createObjectURL(file);
-  try{
-    const img=await new Promise((resolve,reject)=>{
-      const im=new Image();
-      im.onload=()=>resolve(im);
-      im.onerror=()=>reject(new Error("Gambar tidak dapat dibaca."));
-      im.src=url;
-    });
-    const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
-    const w=Math.max(1,Math.round(img.naturalWidth*scale));
-    const h=Math.max(1,Math.round(img.naturalHeight*scale));
-    const c=document.createElement("canvas");
-    c.width=w;c.height=h;
-    const ctx=c.getContext("2d");
-    ctx.drawImage(img,0,0,w,h);
-    return c.toDataURL("image/jpeg",quality);
-  }finally{URL.revokeObjectURL(url);}
-}
-
-$("editImageFile").onchange=async()=>{
-  const file=$("editImageFile").files?.[0];
-  if(!file)return;
-  try{
-    editImageData=await compressMenuImage(file);
-    $("editImagePreview").src=editImageData;
-    $("editImagePreviewWrap").classList.remove("hidden");
-  }catch(e){
-    editImageData="";
-    $("editImagePreview").src="";
-    $("editImagePreviewWrap").classList.add("hidden");
-    alert("Gagal memproses gambar: "+e.message);
-    $("editImageFile").value="";
-  }
-};
-
-$("removeImageBtn").onclick=()=>{
-  editImageData="";
-  $("editImageFile").value="";
-  $("editImagePreview").src="";
-  $("editImagePreviewWrap").classList.add("hidden");
-};
 
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest(".modal").classList.remove("show"));
 $("newMenuBtn").onclick=openNewMenu;
@@ -727,7 +612,6 @@ $("saveMenuBtn").onclick=async()=>{
      stock:stockVal===""?null:Number(stockVal),
      active:$("editActive").value==="true",
      description:$("editDesc").value.trim(),
-     imageData:editImageData||"",
      sort:sortVal===""?(isNew?(Math.max(0,...menu.map(m=>Number(m.sort)||0))+1):999):Number(sortVal),
      updatedAt:serverTimestamp()
    };
