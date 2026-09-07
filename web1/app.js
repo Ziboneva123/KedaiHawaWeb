@@ -10,6 +10,14 @@ let currentUser=null, menu=[], orders=[];
 let storeOpen=true;
 let ordersInitialized=false;
 
+// ============================================================
+// PRINTER TARGET
+// Cleanter tetap dipertahankan. Untuk pengujian saat ini,
+// Web1 mengirim ke ESP32. Ubah ke CLEANTER bila diperlukan.
+// ============================================================
+const PRINT_TARGET="ESP32"; // ESP32 | CLEANTER
+const ESP32_PRINTER_URL="http://192.168.1.16";
+
 function renderStoreStatus(){
   const text=$("storeStatusText");
   const btn=$("storeToggleBtn");
@@ -198,9 +206,43 @@ async function cleanterHealth(){
   }catch(e){return false;}
 }
 
+async function esp32Print(payload){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),5000);
+  try{
+    const r=await fetch(ESP32_PRINTER_URL+"/print",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload),
+      cache:"no-store",
+      credentials:"omit",
+      signal:controller.signal
+    });
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error("ESP32 HTTP "+r.status+(data?.error?": "+data.error:""));
+    if(data?.status && data.status !== "printed") throw new Error("ESP32: "+data.status);
+    return data;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+async function esp32Health(){
+  try{
+    const r=await fetch(ESP32_PRINTER_URL+"/health",{cache:"no-store",signal:AbortSignal.timeout(1800)});
+    return r.ok;
+  }catch(e){return false;}
+}
+
+async function printerPrint(payload){
+  if(PRINT_TARGET==="ESP32") return await esp32Print(payload);
+  return await cleanterPrint(payload);
+}
+
 function cleanterOrderPayload(o){
   const num=(o.orderNo||"").split("-").at(-1)||"?";
   const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
+  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
   const content=[
     {type:"text",text:"KEDAI HAWA",align:"center",bold:true,size:"large"},
     {type:"text",text:"LAMPIRAN ORDER",align:"center",bold:true},
@@ -225,7 +267,8 @@ function cleanterOrderPayload(o){
   if(Number(o.shippingFee)>0) content.push({type:"row",left:"ONGKIR",right:rupiah(o.shippingFee)});
   content.push({type:"row",left:"TOTAL",right:rupiah(o.total),bold:true});
   content.push({type:"divider"},{type:"text",text:"PENGIRIMAN: "+String(delivery),bold:true});
-  if(o.address) content.push({type:"text",text:"ALAMAT: "+String(o.address)});
+  content.push({type:"text",text:"PEMBAYARAN: "+String(payment),bold:true});
+  content.push({type:"text",text:"ALAMAT: "+String(o.address||"-")});
   if(o.deliveryNote) content.push({type:"text",text:"CATATAN ALAMAT: "+String(o.deliveryNote)});
   if(o.orderNote) content.push({type:"text",text:"CATATAN PESANAN: "+String(o.orderNote)});
   content.push({type:"divider"},{type:"text",text:"*** ORDER BARU ***",align:"center",bold:true},{type:"text",text:"Kedai Hawa",align:"center"},{type:"feed",lines:3});
@@ -270,56 +313,32 @@ function browserOrderPrint(o){
   const number=(o.orderNo||"").split("-").at(-1)||"?";
   const items=(o.items||[]).map(i=>{const q=Number(i.qty)||0,p=Number(i.price)||0;return `<div style="padding:4px 0;border-bottom:1px dotted #777"><b>${esc(i.name||"")}${i.variant?` (${esc(i.variant)})`:""}</b><br>${q} x ${rupiah(p)} <b style="float:right">${rupiah(q*p)}</b></div>`;}).join("");
   const delivery={pickup:"COD / Ambil Sendiri",direct:"Antar Langsung",courier:"Ojek Online / Kurir"}[o.deliveryMethod]||o.deliveryMethod||"-";
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>__TITLE__</title><style>@page{size:58mm auto;margin:0}body{width:58mm;margin:0;padding:3mm 2.5mm;font:11px Arial;color:#000;box-sizing:border-box}.c{text-align:center}.t{font-size:18px;font-weight:900}.o{font-size:16px;font-weight:900}.d{border-top:1px dashed #000;margin:7px 0}.n{font-size:10px;white-space:pre-wrap}</style></head><body><div class="c t">KEDAI HAWA</div><div class="c"><b>LAMPIRAN ORDER</b></div><div class="d"></div><div class="c o">ORDER #${esc(number)}</div><div class="c">${esc(receiptDateTime(o.createdAt))}</div><div class="d"></div><b>PELANGGAN</b><br>${esc(o.customerName||"-")}<br>HP : ${esc(o.customerPhone||"-")}<div class="d"></div><b>DAFTAR PESANAN</b>${items}<div class="d"></div><b>PENGIRIMAN:</b> ${esc(delivery)}${o.address?`<div style="margin-top:4px"><b>ALAMAT:</b><div class="n">${esc(o.address)}</div></div>`:""}${o.deliveryNote?`<div style="margin-top:4px"><b>CATATAN ALAMAT:</b><div class="n">${esc(o.deliveryNote)}</div></div>`:""}${o.orderNote?`<div style="margin-top:4px"><b>CATATAN PESANAN:</b><div class="n">${esc(o.orderNote)}</div></div>`:""}<div class="d"></div><div class="c"><b>*** ORDER BARU ***</b><br>Kedai Hawa</div><script>window.onload=()=>setTimeout(()=>window.print(),250);window.onafterprint=()=>setTimeout(()=>window.close(),300);<\/script></body></html>`;
+  const payment={cash:"COD / Tunai",transfer:"Transfer",qris:"QRIS"}[o.paymentMethod]||o.paymentMethod||"-";
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>__TITLE__</title><style>@page{size:58mm auto;margin:0}body{width:58mm;margin:0;padding:3mm 2.5mm;font:11px Arial;color:#000;box-sizing:border-box}.c{text-align:center}.t{font-size:18px;font-weight:900}.o{font-size:16px;font-weight:900}.d{border-top:1px dashed #000;margin:7px 0}.n{font-size:10px;white-space:pre-wrap}</style></head><body><div class="c t">KEDAI HAWA</div><div class="c"><b>LAMPIRAN ORDER</b></div><div class="d"></div><div class="c o">ORDER #${esc(number)}</div><div class="c">${esc(receiptDateTime(o.createdAt))}</div><div class="d"></div><b>PELANGGAN</b><br>${esc(o.customerName||"-")}<br>HP : ${esc(o.customerPhone||"-")}<div class="d"></div><b>DAFTAR PESANAN</b>${items}<div class="d"></div><b>PENGIRIMAN:</b> ${esc(delivery)}<div style="margin-top:4px"><b>PEMBAYARAN:</b> ${esc(payment)}</div><div style="margin-top:4px"><b>ALAMAT:</b><div class="n">${esc(o.address||"-")}</div></div>${o.deliveryNote?`<div style="margin-top:4px"><b>CATATAN ALAMAT:</b><div class="n">${esc(o.deliveryNote)}</div></div>`:""}${o.orderNote?`<div style="margin-top:4px"><b>CATATAN PESANAN:</b><div class="n">${esc(o.orderNote)}</div></div>`:""}<div class="d"></div><div class="c"><b>*** ORDER BARU ***</b><br>Kedai Hawa</div><script>window.onload=()=>setTimeout(()=>window.print(),250);window.onafterprint=()=>setTimeout(()=>window.close(),300);<\/script></body></html>`;
   return browserPrint(html,"Lampiran Order #"+number);
 }
 
-async function printOrder(o){
+async function printOrder(o, allowBrowserFallback=false){
   try{
-    await cleanterPrint(cleanterOrderPayload(o));
+    await printerPrint(cleanterOrderPayload(o));
+    const s=$("printerStatus");
+    if(s){
+      s.textContent=PRINT_TARGET==="ESP32"
+        ? "🟢 Lampiran order tercetak melalui ESP32"
+        : "🟢 Lampiran order tercetak melalui Cleanter";
+      s.className="notice success";
+    }
     return true;
   }catch(e){
-    console.error("AUTO PRINT CLEANter GAGAL",e);
+    console.error(PRINT_TARGET+" GAGAL",e);
+    if(allowBrowserFallback){
+      const ok=browserOrderPrint(o);
+      const s=$("printerStatus");
+      if(s){s.textContent=ok?"🟡 Lampiran dibuka lewat preview cetak browser":"🔴 Preview cetak diblokir browser";s.className=ok?"notice":"notice error";}
+      return ok;
+    }
     return false;
   }
-}
-
-
-function showLampiranMenu(o){
-  // Menu manual Lampiran: tidak menyentuh jalur Auto Print.
-  const old=document.getElementById("lampiranChoiceModal");
-  if(old) old.remove();
-  const number=(o.orderNo||"").split("-").at(-1)||"?";
-  const wrap=document.createElement("div");
-  wrap.id="lampiranChoiceModal";
-  wrap.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:100000;padding:18px";
-  wrap.innerHTML=`<div style="width:min(380px,100%);background:#fff;border-radius:18px;padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.35)">
-    <div style="font-size:20px;font-weight:900;text-align:center">📎 LAMPIRAN ORDER</div>
-    <div style="text-align:center;color:#667085;margin:7px 0 18px">ORDER #${esc(number)}</div>
-    <button type="button" id="lampiranPreviewBtn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#edf5ef;color:#185c37;font-weight:900;font-size:16px;cursor:pointer">👁 Preview</button>
-    <button type="button" id="lampiranPrintBtn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#185c37;color:#fff;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px">🖨 Print</button>
-    <button type="button" id="lampiranCancelBtn" style="width:100%;padding:11px;border:0;background:transparent;color:#667085;font-weight:800;cursor:pointer;margin-top:6px">Batal</button>
-  </div>`;
-  document.body.appendChild(wrap);
-  const close=()=>wrap.remove();
-  wrap.querySelector("#lampiranCancelBtn").onclick=close;
-  wrap.querySelector("#lampiranPreviewBtn").onclick=()=>{
-    close();
-    browserOrderPrint(o);
-  };
-  wrap.querySelector("#lampiranPrintBtn").onclick=async()=>{
-    const btn=wrap.querySelector("#lampiranPrintBtn");
-    btn.disabled=true; btn.textContent="⏳ Mencetak...";
-    try{
-      await cleanterPrint(cleanterOrderPayload(o));
-      close();
-    }catch(e){
-      console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
-      close();
-      browserOrderPrint(o);
-    }
-  };
-  wrap.addEventListener("click",e=>{if(e.target===wrap) close();});
 }
 
 async function autoPrintNewOrder(o){
@@ -345,7 +364,7 @@ async function autoPrintNewOrder(o){
 }
 
 async function printReceipt(o){
-  try{await cleanterPrint(cleanterReceiptPayload(o));return true;}
+  try{await printerPrint(cleanterReceiptPayload(o));return true;}
   catch(e){
     const number=(o.orderNo||"").split("-").at(-1)||"?";
     const items=(o.items||[]).map(i=>`<div style="padding:4px 0;border-bottom:1px dotted #777"><b>${esc(i.name||"")}${i.variant?` (${esc(i.variant)})`:""}</b><div style="display:flex;justify-content:space-between">${Number(i.qty)||0} x ${rupiah(i.price)} <b>${rupiah((Number(i.qty)||0)*(Number(i.price)||0))}</b></div></div>`).join("");
@@ -524,7 +543,7 @@ function renderOrders(){
  const done=orders.filter(o=>o.status==="received"||o.status==="completed").reduce((s,o)=>s+(o.total||0),0);$("todaySales").textContent=rupiah(done);
  $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
  document.querySelectorAll("[data-status]").forEach(s=>s.onchange=async()=>updateDoc(doc(db,"orders",s.dataset.status),{status:s.value,statusUpdatedAt:serverTimestamp()}));
- document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) showLampiranMenu(o);});
+ document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) printOrder(o,true);});
  document.querySelectorAll("[data-print-receipt]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printReceipt);if(o) printReceipt(o);});
 }
 function label(s){return({pending:"Menunggu Konfirmasi",confirmed:"Dikonfirmasi",processing:"Sedang Diproses",ready:"Siap / Diantar",delivered:"Diserahkan ke Pelanggan",received:"Diterima Pelanggan",cancelled:"Dibatalkan"})[s]||s}
