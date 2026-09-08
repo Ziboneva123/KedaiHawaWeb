@@ -312,6 +312,7 @@ function showLampiranMenu(o){
     btn.disabled=true; btn.textContent="⏳ Mencetak...";
     try{
       await cleanterPrint(cleanterOrderPayload(o));
+      try{ await updateDoc(doc(db,"orders",o.id),{autoPrintFailed:false}); }catch(e2){}
       close();
     }catch(e){
       console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
@@ -336,12 +337,22 @@ async function autoPrintNewOrder(o){
       localStorage.setItem(key,JSON.stringify(printed.slice(-200)));
       const s=$("printerStatus");
       if(s){s.textContent="🟢 Lampiran order otomatis tercetak";s.className="notice success";}
+      // Bersihkan tanda "butuh print manual" kalau sebelumnya sempat gagal.
+      try{ await updateDoc(doc(db,"orders",o.id),{autoPrintFailed:false}); }catch(e){}
       return;
     }
     await new Promise(r=>setTimeout(r,1500));
   }
+
+  // GAGAL setelah semua percobaan: batalkan job print otomatis (tidak retry lagi,
+  // order TIDAK dibatalkan) dan tandai order ini butuh dicetak manual.
   const s=$("printerStatus");
-  if(s){s.textContent="🔴 Cleanter tidak merespons. Pastikan HTTP Server Running.";s.className="notice error";}
+  if(s){s.textContent="🔴 Cleanter tidak merespons. Print otomatis dibatalkan — cetak manual dari daftar order.";s.className="notice error";}
+  try{
+    await updateDoc(doc(db,"orders",o.id),{autoPrintFailed:true});
+  }catch(e){
+    console.error("Gagal menandai order butuh print manual",e);
+  }
 }
 
 async function printReceipt(o){
@@ -427,7 +438,16 @@ async function enableNotifications(){
 
 function histDate(o){if(!o?.createdAt)return null;const d=typeof o.createdAt?.toDate==="function"?o.createdAt.toDate():new Date(o.createdAt);return isNaN(d)?null:d;}
 function histList(){const f=$("historyFrom").value,t=$("historyTo").value,st=$("historyStatus").value;return orders.filter(o=>{const d=histDate(o);if(!d)return false;const day=d.toISOString().slice(0,10);return (!f||day>=f)&&(!t||day<=t)&&(!st||o.status===st);});}
-function renderHistory(){const list=histList(),omzet=list.filter(o=>o.status!=="cancelled").reduce((a,o)=>a+(Number(o.total)||0),0);$("historySummary").innerHTML=`<b>${list.length}</b> pesanan • Total transaksi: <b>${rupiah(omzet)}</b>`;$("historyOmzet").textContent=rupiah(omzet);$("historyRows").innerHTML=list.map(o=>{const d=histDate(o);const dt=d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"-";return `<tr><td>#${(o.orderNo||"").split("-").at(-1)||"?"}</td><td>${dt}</td><td>${o.customerName||"-"}</td><td>${o.deliveryMethod||"-"}</td><td>${rupiah(o.total)}</td><td>${label(o.status)}</td></tr>`}).join("")||`<tr><td colspan="6">Belum ada history.</td></tr>`;}
+function renderHistory(){const list=histList(),omzet=list.filter(o=>o.status!=="cancelled").reduce((a,o)=>a+(Number(o.total)||0),0);$("historySummary").innerHTML=`<b>${list.length}</b> pesanan • Total transaksi: <b>${rupiah(omzet)}</b>`;$("historyOmzet").textContent=rupiah(omzet);$("historyRows").innerHTML=list.map(o=>{const d=histDate(o);const dt=d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"-";return `<tr><td>#${(o.orderNo||"").split("-").at(-1)||"?"}</td><td>${dt}</td><td>${o.customerName||"-"}</td><td>${o.deliveryMethod||"-"}</td><td>${rupiah(o.total)}</td><td>${label(o.status)}</td><td><button type="button" class="btn danger" data-delete-history="${o.id}">🗑️ Hapus</button></td></tr>`}).join("")||`<tr><td colspan="7">Belum ada history.</td></tr>`;
+  document.querySelectorAll("[data-delete-history]").forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.deleteHistory, o=orders.find(x=>x.id===id); if(!o)return;
+    const number=(o.orderNo||"").split("-").at(-1)||"?";
+    if(!confirm(`Hapus riwayat ORDER #${number} (${o.customerName||"-"})? Tindakan ini tidak bisa dibatalkan.`)) return;
+    b.disabled=true; b.textContent="⏳ Menghapus...";
+    try{ await deleteDoc(doc(db,"orders",id)); }
+    catch(e){ alert("Gagal menghapus riwayat: "+e.message); b.disabled=false; b.textContent="🗑️ Hapus"; }
+  });
+}
 function downloadHistory(){const list=histList(),rows=[["Order","Tanggal & Jam","Pelanggan","No HP","Pengiriman","Pembayaran","Subtotal","Ongkir","Total","Status","Catatan"]];list.forEach(o=>{const d=histDate(o);rows.push([o.orderNo,d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"",o.customerName,o.customerPhone,o.deliveryMethod,o.paymentMethod,o.subtotal,o.shippingFee,o.total,label(o.status),o.orderNote||""]);});const csv="\uFEFF"+rows.map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\r\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=`history-omzet-kedai-hawa-${new Date().toISOString().slice(0,10)}.csv`;a.click();}
 function printHistory(){const list=histList(),omzet=list.filter(o=>o.status!=="cancelled").reduce((a,o)=>a+(Number(o.total)||0),0),rows=list.map(o=>{const d=histDate(o);return `<tr><td>#${(o.orderNo||"").split("-").at(-1)||"?"}</td><td>${d?new Intl.DateTimeFormat("id-ID",{dateStyle:"short",timeStyle:"medium"}).format(d):"-"}</td><td>${o.customerName||"-"}</td><td>${o.deliveryMethod||"-"}</td><td>${rupiah(o.total)}</td><td>${label(o.status)}</td></tr>`}).join("");const w=open("","_blank");if(!w){alert("Izinkan pop-up untuk mencetak.");return;}w.document.write(`<html><head><title>History Kedai Hawa</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #aaa;padding:7px}th{background:#eee}</style></head><body><h1>KEDAI HAWA</h1><h2>History Pesanan</h2><table><tr><th>Order</th><th>Tanggal & Jam</th><th>Pelanggan</th><th>Pengiriman</th><th>Total</th><th>Status</th></tr>${rows}</table><h3>Jumlah Order: ${list.length}</h3><h3>Omzet: ${rupiah(omzet)}</h3><script>onload=()=>print()<\/script></body></html>`);w.document.close();}
 $("historyFrom").onchange=renderHistory;$("historyTo").onchange=renderHistory;$("historyStatus").onchange=renderHistory;$("downloadHistoryBtn").onclick=downloadHistory;$("printHistoryBtn").onclick=printHistory;
@@ -522,7 +542,7 @@ function renderMenu(){
 function renderOrders(){
  const pending=orders.filter(o=>o.status==="pending").length; $("newCount").textContent=pending;$("todayCount").textContent=orders.length;
  const done=orders.filter(o=>o.status==="received"||o.status==="completed").reduce((s,o)=>s+(o.total||0),0);$("todaySales").textContent=rupiah(done);
- $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><span class="order-status">${label(o.status)}</span></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
+ $("ordersList").innerHTML=orders.slice(0,50).map(o=>`<div class="card" style="margin:10px 0;background:#fafcf9"><div class="row"><div><b>ORDER #${(o.orderNo||"").split("-").at(-1)||"?"}</b><div class="muted">${o.customerName||"-"} • ${o.deliveryMethod||"-"}</div><div style="margin-top:4px;font-size:13px;color:#17663b">🕒 ${formatDateTime(o.createdAt)}</div></div><div style="text-align:right"><span class="order-status">${label(o.status)}</span>${o.autoPrintFailed?'<div style="margin-top:5px;background:#fee2e2;color:#b42318;font-weight:900;font-size:11px;padding:3px 8px;border-radius:99px;white-space:nowrap">⚠️ Print Gagal — Cetak Manual</div>':""}</div></div><div style="margin-top:9px">${(o.items||[]).map(i=>`${i.name}${i.variant?` (${i.variant})`:""} × ${i.qty}`).join("<br>")}</div><div class="row" style="margin-top:10px"><div style="display:flex;align-items:center;gap:8px"><b>${rupiah(o.total)}</b><button class="btn secondary" data-print-order="${o.id}">📎 Lampiran</button><button class="btn secondary" data-print-receipt="${o.id}">🧾 Struk</button></div><select data-status="${o.id}" style="max-width:230px">${["pending","confirmed","processing","ready","delivered","received","cancelled"].map(s=>`<option value="${s}" ${o.status===s?"selected":""}>${label(s)}</option>`).join("")}</select></div></div>`).join("")||`<div class="muted">Belum ada pesanan.</div>`;
  document.querySelectorAll("[data-status]").forEach(s=>s.onchange=async()=>updateDoc(doc(db,"orders",s.dataset.status),{status:s.value,statusUpdatedAt:serverTimestamp()}));
  document.querySelectorAll("[data-print-order]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printOrder);if(o) showLampiranMenu(o);});
  document.querySelectorAll("[data-print-receipt]").forEach(b=>b.onclick=()=>{const o=orders.find(x=>x.id===b.dataset.printReceipt);if(o) printReceipt(o);});
