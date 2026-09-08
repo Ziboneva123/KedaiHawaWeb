@@ -62,7 +62,7 @@ import {
 import { enableOwnerPush, listenForegroundPush } from "../shared/fcm.js";
 
 const $=id=>document.getElementById(id);
-const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(n||0);
+const rupiah=n=>"Rp "+new Intl.NumberFormat("id-ID",{maximumFractionDigits:0}).format(Number(n)||0);
 let currentUser=null, menu=[], orders=[];
 let storeOpen=true;
 let ordersInitialized=false;
