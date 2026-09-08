@@ -234,7 +234,7 @@ async function cleanterPrint(payload){
       const r=await fetch(url,{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(payload, (key,value)=>typeof value==="string"?value.replace(/\u00A0/g," "):value),
+        body:JSON.stringify(payload),
         cache:"no-store",
         credentials:"omit",
         signal:controller.signal
