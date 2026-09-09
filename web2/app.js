@@ -5,6 +5,7 @@ import {
 
 const $ = id => document.getElementById(id);
 const rupiah = n => new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(n||0);
+const esc = v => String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 const KEDAI_HAWA_PICKUP_ADDRESS = "Jl. Adipati Karna / Jl. Kp. Pasir Limus, Wangunharja, Cikarang Utara, Kabupaten Bekasi, Jawa Barat 17530";
 const KEDAI_HAWA_MAP_URL = "https://maps.app.goo.gl/z2CWgq9P42W7hzZa9";
@@ -183,16 +184,17 @@ function addToCart(id){
   if(p.variants?.length){const idx=Number($(`v-${id}`).value);variant=p.variants[idx];}
   const key=id+"|"+(variant?.name||"");
   const existing=cart.find(x=>x.key===key);
-  if(existing) existing.qty++; else cart.push({key,id,name:p.name,variant:variant?.name||"",price:variant?.price??p.price,qty:1});
+  if(existing) existing.qty++; else cart.push({key,id,name:p.name,variant:variant?.name||"",price:variant?.price??p.price,qty:1,note:""});
   renderCart();
 }
 function renderCart(){
   const count=cart.reduce((s,x)=>s+x.qty,0), total=cart.reduce((s,x)=>s+x.qty*x.price,0);
   $("cartCount").textContent=`${count} item`; $("cartTotal").textContent=rupiah(total); $("cartSubtotal").textContent=rupiah(total);
   $("cartBar").classList.toggle("hidden",count===0);
-  $("cartList").innerHTML=cart.map((x,i)=>`<div class="card" style="margin-bottom:8px"><div class="row"><div><b>${x.name}</b><div class="muted">${x.variant||""}</div><div>${rupiah(x.price)}</div></div><div class="qty"><button data-dec="${i}">−</button><b>${x.qty}</b><button data-inc="${i}">+</button></div></div></div>`).join("") || `<div class="muted">Keranjang kosong.</div>`;
+  $("cartList").innerHTML=cart.map((x,i)=>`<div class="card" style="margin-bottom:8px"><div class="row"><div><b>${x.name}</b><div class="muted">${x.variant||""}</div><div>${rupiah(x.price)}</div></div><div class="qty"><button data-dec="${i}">−</button><b>${x.qty}</b><button data-inc="${i}">+</button></div></div><textarea data-note="${i}" placeholder="Catatan untuk item ini (mis. pedas, tanpa bawang)" rows="1" style="width:100%;margin-top:8px;padding:7px 9px;border:1px solid #ddd;border-radius:8px;font:12px Arial;resize:vertical;box-sizing:border-box">${esc(x.note||"")}</textarea></div>`).join("") || `<div class="muted">Keranjang kosong.</div>`;
   document.querySelectorAll("[data-inc]").forEach(b=>b.onclick=()=>{cart[+b.dataset.inc].qty++;renderCart()});
   document.querySelectorAll("[data-dec]").forEach(b=>b.onclick=()=>{const i=+b.dataset.dec;cart[i].qty--;if(cart[i].qty<=0)cart.splice(i,1);renderCart()});
+  document.querySelectorAll("[data-note]").forEach(t=>t.oninput=()=>{cart[+t.dataset.note].note=t.value;});
 }
 function open(id){$(id).classList.add("show")} function close(id){$(id).classList.remove("show")}
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>b.closest(".modal").classList.remove("show"));
@@ -220,7 +222,7 @@ function renderCheckout(){
   const subtotal=cart.reduce((s,x)=>s+x.qty*x.price,0);
   const shippingFee=calcShippingFee($("deliveryMethod").value);
   const total=subtotal+shippingFee;
-  $("checkoutSummary").innerHTML=cart.map(x=>`${x.name}${x.variant?` (${x.variant})`:""} × ${x.qty} = <b>${rupiah(x.qty*x.price)}</b>`).join("<br>")
+  $("checkoutSummary").innerHTML=cart.map(x=>`${x.name}${x.variant?` (${x.variant})`:""} × ${x.qty} = <b>${rupiah(x.qty*x.price)}</b>${x.note?`<div class="muted" style="font-size:12px">📝 ${esc(x.note)}</div>`:""}`).join("<br>")
     + `<hr><div class="row"><span>Subtotal</span><b>${rupiah(subtotal)}</b></div>`
     + `<div class="row" style="margin-top:5px"><span>Ongkir</span><b>${rupiah(shippingFee)}</b></div>`
     + `<div class="muted" style="margin-top:5px">Total qty: ${totalQty()}</div>`;
@@ -252,7 +254,7 @@ $("placeOrderBtn").onclick=async()=>{
     orderNo,customerUid:currentUid,customerName:name,customerPhone:phone,deliveryMethod:method,
     address:method==="pickup"?"":$("address").value.trim(),deliveryNote:$("deliveryNote").value.trim(),
     paymentMethod,orderNote:$("orderNote").value.trim(),
-    items:cart.map(x=>({name:x.name,variant:x.variant,price:x.price,qty:x.qty})),
+    items:cart.map(x=>({name:x.name,variant:x.variant,price:x.price,qty:x.qty,note:(x.note||"").trim()})),
     totalQty:totalQty(),subtotal,shippingFee,total,status:"pending",createdAt:serverTimestamp(),customerReceived:false,
     ...(method==="direct"?{shippingRule:"Qty < 5 = Rp5.000; Qty >= 5 = Rp0"}:{}),
     ...(method==="courier"?{lalamovePickupAddress:KEDAI_HAWA_PICKUP_ADDRESS,lalamovePickupMapUrl:KEDAI_HAWA_MAP_URL,lalamoveWebUrl:LALAMOVE_WEB_URL}:{}),
