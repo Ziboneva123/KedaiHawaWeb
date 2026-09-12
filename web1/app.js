@@ -287,8 +287,28 @@ async function printOrder(o){
 }
 
 
+const MANUAL_PRINT_FUNCTION_URL = "https://asia-southeast2-kedai-hawa.cloudfunctions.net/manualPrintOrder";
+
+async function remotePrintOrder(o){
+  if(!currentUser || currentUser.isAnonymous) throw new Error("Owner belum login.");
+  const token = await currentUser.getIdToken(true);
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(),15000);
+  try{
+    const r = await fetch(MANUAL_PRINT_FUNCTION_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},
+      body:JSON.stringify({order:o}),
+      cache:"no-store",
+      signal:controller.signal
+    });
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data?.error || "Manual print HTTP "+r.status);
+    return data;
+  }finally{ clearTimeout(timer); }
+}
+
 function showLampiranMenu(o){
-  // Menu manual Lampiran: tidak menyentuh jalur Auto Print.
   const old=document.getElementById("lampiranChoiceModal");
   if(old) old.remove();
   const number=(o.orderNo||"").split("-").at(-1)||"?";
@@ -299,27 +319,38 @@ function showLampiranMenu(o){
     <div style="font-size:20px;font-weight:900;text-align:center">📎 LAMPIRAN ORDER</div>
     <div style="text-align:center;color:#667085;margin:7px 0 18px">ORDER #${esc(number)}</div>
     <button type="button" id="lampiranPreviewBtn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#edf5ef;color:#185c37;font-weight:900;font-size:16px;cursor:pointer">👁 Preview</button>
-    <button type="button" id="lampiranPrintBtn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#185c37;color:#fff;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px">🖨 Print</button>
+    <button type="button" id="lampiranCleanterBtn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#185c37;color:#fff;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px">🖨 Print Cleanter</button>
+    <button type="button" id="lampiranEsp32Btn" style="width:100%;padding:13px;border:0;border-radius:11px;background:#2563eb;color:#fff;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px">📡 Print ESP32</button>
     <button type="button" id="lampiranCancelBtn" style="width:100%;padding:11px;border:0;background:transparent;color:#667085;font-weight:800;cursor:pointer;margin-top:6px">Batal</button>
   </div>`;
   document.body.appendChild(wrap);
   const close=()=>wrap.remove();
   wrap.querySelector("#lampiranCancelBtn").onclick=close;
-  wrap.querySelector("#lampiranPreviewBtn").onclick=()=>{
-    close();
-    browserOrderPrint(o);
-  };
-  wrap.querySelector("#lampiranPrintBtn").onclick=async()=>{
-    const btn=wrap.querySelector("#lampiranPrintBtn");
-    btn.disabled=true; btn.textContent="⏳ Mencetak...";
+  wrap.querySelector("#lampiranPreviewBtn").onclick=()=>{ close(); browserOrderPrint(o); };
+  wrap.querySelector("#lampiranCleanterBtn").onclick=async()=>{
+    const btn=wrap.querySelector("#lampiranCleanterBtn");
+    btn.disabled=true; btn.textContent="⏳ Mencetak Cleanter...";
     try{
       await cleanterPrint(cleanterOrderPayload(o));
       try{ await updateDoc(doc(db,"orders",o.id),{autoPrintFailed:false}); }catch(e2){}
       close();
     }catch(e){
       console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
+      btn.disabled=false; btn.textContent="🖨 Print Cleanter";
+      alert("Print Cleanter gagal: "+(e?.message||e));
+    }
+  };
+  wrap.querySelector("#lampiranEsp32Btn").onclick=async()=>{
+    const btn=wrap.querySelector("#lampiranEsp32Btn");
+    btn.disabled=true; btn.textContent="⏳ Mengirim ke ESP32...";
+    try{
+      await remotePrintOrder(o);
       close();
-      browserOrderPrint(o);
+      alert("Order berhasil dikirim ke jalur ESP32. ESP32 akan mengambil dan mencetak ke RPP02N.");
+    }catch(e){
+      console.error("PRINT ESP32 GAGAL",e);
+      btn.disabled=false; btn.textContent="📡 Print ESP32";
+      alert("Print ESP32 gagal: "+(e?.message||e));
     }
   };
   wrap.addEventListener("click",e=>{if(e.target===wrap) close();});
