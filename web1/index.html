@@ -355,9 +355,13 @@ function showLampiranMenu(o){
       👁 Preview
     </button>
 
-    <button type="button" id="lampiranPrintBtn" class="btn primary"
+    <button type="button" id="lampiranPrintCleanterBtn" class="btn primary"
       style="display:block;width:100%;min-height:48px;padding:13px;border-radius:11px;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px;touch-action:manipulation">
-      🖨 Print
+      🖨 Print Cleanter
+    </button>
+    <button type="button" id="lampiranPrintEsp32Btn"
+      style="display:block;width:100%;min-height:48px;padding:13px;border:0;border-radius:11px;background:#2563eb;color:#fff;font-weight:900;font-size:16px;cursor:pointer;margin-top:10px;touch-action:manipulation">
+      📡 Print ESP32
     </button>
 
     <button type="button" id="lampiranCancelBtn"
@@ -377,8 +381,8 @@ function showLampiranMenu(o){
     browserOrderPrint(o);
   };
 
-  document.getElementById("lampiranPrintBtn").onclick=async()=>{
-    const btn=document.getElementById("lampiranPrintBtn");
+  document.getElementById("lampiranPrintCleanterBtn").onclick=async()=>{
+    const btn=document.getElementById("lampiranPrintCleanterBtn");
     if(!btn)return;
     btn.disabled=true;
     btn.textContent="⏳ Mencetak...";
@@ -391,6 +395,36 @@ function showLampiranMenu(o){
       console.error("PRINT LAMPIRAN CLEANter GAGAL",e);
       close();
       browserOrderPrint(o);
+    }
+  };
+
+  document.getElementById("lampiranPrintEsp32Btn").onclick=async()=>{
+    const btn=document.getElementById("lampiranPrintEsp32Btn");
+    if(!btn)return;
+    btn.disabled=true;
+    btn.textContent="⏳ Mengirim ke ESP32...";
+    try{
+      if(!currentUser || currentUser.isAnonymous){
+        throw new Error("Akun Owner belum login.");
+      }
+      const token=await currentUser.getIdToken(true);
+      const r=await fetch("https://asia-southeast2-kedai-hawa.cloudfunctions.net/manualPrintOrder",{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "Authorization":"Bearer "+token
+        },
+        body:JSON.stringify({order:o})
+      });
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(data.error||("HTTP "+r.status));
+      close();
+      alert("Print ESP32 berhasil dikirim.\nOrder #"+number);
+    }catch(e){
+      console.error("PRINT ESP32 GAGAL",e);
+      btn.disabled=false;
+      btn.textContent="📡 Print ESP32";
+      alert("Print ESP32 gagal: "+(e?.message||e));
     }
   };
 
