@@ -407,7 +407,7 @@ function showLampiranMenu(o){
       if(!currentUser || currentUser.isAnonymous){
         throw new Error("Akun Owner belum login.");
       }
-      const token=await currentUser.getIdToken(true);
+      const token=await currentUser.getIdToken();
       const r=await fetch("https://asia-southeast2-kedai-hawa.cloudfunctions.net/manualPrintOrder",{
         method:"POST",
         headers:{
